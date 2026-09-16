@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>preview</LangVersion>
+    <TieredPGO>true</TieredPGO>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <AssemblyName>glacier</AssemblyName>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>glacier</ToolCommandName>
+    <PackageId>Glacier.Cli</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Ian Cowley</Authors>
+    <Company>Glacier High-Performance Ecosystem</Company>
+    <Description>Unified pure C# .NET 10 LLM command-line application (glacier). High-performance inference with Universal Architecture Matrix (Llama 3, Phi-4, DeepSeek, Mistral, Qwen), in-process LoRA fine-tuning (Glacier.Tune), GGUF adapter fusion, in-process SIMD GraphRAG (Glacier.Rag), PagedAttention continuous batching server (Glacier.Serve), and HuggingFace GGUF model downloader.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ian-cowley/Glacier.Cli</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ian-cowley/Glacier.Cli.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>llm;inference;fine-tuning;lora;graphrag;continuous-batching;paged-attention;ollama;vllm;cli;net10;glacier</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Glacier.Inference" Version="1.2.0" />
+    <PackageReference Include="Glacier.Tune" Version="1.0.3" />
+    <PackageReference Include="Glacier.Serve" Version="1.1.0" />
+    <PackageReference Include="Glacier.Rag" Version="1.0.0" />
+    <PackageReference Include="Glacier.Graph" Version="1.0.3" />
+    <PackageReference Include="Glacier.Vector" Version="1.0.3" />
+    <PackageReference Include="Glacier.Tensor" Version="1.0.6" />
+    <PackageReference Include="Glacier.Polaris" Version="1.0.15" />
+    <PackageReference Include="Glacier.Gpu" Version="1.0.5" />
+  </ItemGroup>
+</Project>
