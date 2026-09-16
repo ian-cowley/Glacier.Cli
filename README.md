@@ -19,6 +19,18 @@
 
 ## ⚡ Install in One Command
 
+### 🪟 Windows (PowerShell One-Liner):
+```powershell
+irm https://raw.githubusercontent.com/ian-cowley/Glacier.Cli/main/install.ps1 | iex
+```
+*Or download [`glacier-win-x64.zip`](https://github.com/ian-cowley/Glacier.Cli/releases/latest/download/glacier-win-x64.zip) and double-click `install.bat`.*
+
+### 🐧 Linux & 🍎 macOS:
+```bash
+curl -fsSL https://raw.githubusercontent.com/ian-cowley/Glacier.Cli/main/install.sh | bash
+```
+
+### 📦 Via .NET 10 Global Tool:
 ```bash
 dotnet tool install -g Glacier.Cli
 ```
