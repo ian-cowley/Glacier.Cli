@@ -29,9 +29,21 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="Exists('..\..\..\Glacier.Inference\src\Glacier.Inference\Glacier.Inference.csproj')">
     <ProjectReference Include="..\..\..\Glacier.Inference\src\Glacier.Inference\Glacier.Inference.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="!Exists('..\..\..\Glacier.Inference\src\Glacier.Inference\Glacier.Inference.csproj')">
+    <PackageReference Include="Glacier.Inference" Version="1.2.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('..\..\..\Glacier.Tune\src\Glacier.Tune\Glacier.Tune.csproj')">
     <ProjectReference Include="..\..\..\Glacier.Tune\src\Glacier.Tune\Glacier.Tune.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="!Exists('..\..\..\Glacier.Tune\src\Glacier.Tune\Glacier.Tune.csproj')">
+    <PackageReference Include="Glacier.Tune" Version="1.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Glacier.Serve" Version="1.1.0" />
     <PackageReference Include="Glacier.Rag" Version="1.0.0" />
     <PackageReference Include="Glacier.Graph" Version="1.0.3" />
