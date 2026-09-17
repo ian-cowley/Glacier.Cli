@@ -42,7 +42,7 @@ dotnet tool install -g Glacier.Cli
 | Command | Purpose | Benchmark / Highlight |
 | :--- | :--- | :--- |
 | **`glacier run`** | Instant GPU/CPU streaming inference & REPL | **<15ms cold start**, AVX-512 & Bare-Metal SASS |
-| **`glacier tune`** | In-process PEFT LoRA fine-tuning | **20 min full training** vs 4h 25m in Python |
+| **`glacier tune`** | In-process PEFT LoRA fine-tuning | **15.98s / step (32 tok/s)** on RTX 4060 (2.63x speedup) |
 | **`glacier merge`** | Zero-copy GGUF adapter fusion | **< 60s** lossless Q8_0 fusion |
 | **`glacier rag`** | SIMD Vector + CSR Knowledge Graph RAG | **< 10ms hybrid retrieval**, zero-copy graph traversal |
 | **`glacier serve`** | Ollama & OpenAI HTTP continuous batching | **PagedAttention**, 16,000+ req/s throughput |
@@ -63,7 +63,7 @@ glacier run model.gguf
 
 ### 2. In-Process Fine-Tuning & Adapter Export
 ```bash
-# Fine-tune in 20 minutes directly in pure .NET 10
+# Fine-tune directly in pure .NET 10 (GPU VRAM-resident + AVX-512)
 glacier tune base.gguf --data dataset.jsonl --epochs 3 --rank 16 --out adapter.bin
 
 # Fuse LoRA adapter directly into a standalone production GGUF

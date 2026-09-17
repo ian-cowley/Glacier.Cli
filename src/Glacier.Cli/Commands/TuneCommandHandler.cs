@@ -30,7 +30,10 @@ public static class TuneCommandHandler
         int epochs = 3;
         int batchSize = 1;
         int gradAccum = 4;
+        int maxSeqLen = 512;
+        int? maxSteps = null;
         string device = "auto";
+        bool checkpointActivations = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -67,6 +70,14 @@ public static class TuneCommandHandler
             {
                 epochs = int.Parse(args[++i]);
             }
+            else if (arg is "-s" or "--steps" or "--max-steps" && i + 1 < args.Length)
+            {
+                maxSteps = int.Parse(args[++i]);
+            }
+            else if (arg is "--seq-len" or "--max-seq-len" && i + 1 < args.Length)
+            {
+                maxSeqLen = int.Parse(args[++i]);
+            }
             else if (arg is "-b" or "--batch-size" && i + 1 < args.Length)
             {
                 batchSize = int.Parse(args[++i]);
@@ -78,6 +89,10 @@ public static class TuneCommandHandler
             else if (arg is "--device" && i + 1 < args.Length)
             {
                 device = args[++i];
+            }
+            else if (arg is "--checkpoint-activations" or "--recompute")
+            {
+                checkpointActivations = true;
             }
             else if (baseGgufPath == null && !arg.StartsWith("-"))
             {
@@ -128,6 +143,8 @@ public static class TuneCommandHandler
             Epochs = epochs,
             BatchSize = batchSize,
             GradientAccumulationSteps = gradAccum,
+            MaxSteps = maxSteps,
+            CheckpointActivations = checkpointActivations,
             OutputDir = Path.GetDirectoryName(outAdapterPath) ?? "."
         };
 
@@ -135,18 +152,13 @@ public static class TuneCommandHandler
         var swTotal = Stopwatch.StartNew();
         using var model = GgufLoraModel.Load(baseGgufPath, loraConfig, device);
 
-        Console.WriteLine($"[2/4] Parsing ChatML training dataset: {dataJsonlPath}...");
-        var dataset = ChatMlDataset.FromFile(dataJsonlPath, model.Tokenizer);
+        Console.WriteLine($"[2/4] Parsing ChatML training dataset (Max Length: {maxSeqLen}): {dataJsonlPath}...");
+        var dataset = ChatMlDataset.FromFile(dataJsonlPath, model.Tokenizer, maxSeqLength: maxSeqLen);
 
         Console.WriteLine($"[3/4] Initializing LoRA Trainer (Rank: {rank}, Alpha: {alpha}, LR: {lr:E2})...");
         using var trainer = new LoraTrainer(model, trainArgs);
 
-        int totalTokens = 0;
-        trainer.Train(dataset, onStep: step =>
-        {
-            totalTokens += (int)(step.TokensPerSec * (step.StepDurationMs / 1000.0));
-            Console.WriteLine($"  Step {step.Step,4} | Loss: {step.Loss:F4} | {step.TokensPerSec:F1} tok/s | Step Time: {step.StepDurationMs:F0} ms");
-        });
+        trainer.Train(dataset);
 
         Console.WriteLine($"[4/4] Saving LoRA delta adapter to: {outAdapterPath}...");
         string? outDir = Path.GetDirectoryName(outAdapterPath);
@@ -189,8 +201,11 @@ public static class TuneCommandHandler
         Console.WriteLine("  --alpha <float>                      LoRA scaling coefficient alpha (default: 32)");
         Console.WriteLine("  --lr <float>                         Learning rate (default: 0.0002)");
         Console.WriteLine("  -e, --epochs <int>                   Number of training epochs (default: 3)");
+        Console.WriteLine("  -s, --steps <int>                    Maximum training steps (overrides epochs if set)");
+        Console.WriteLine("  --seq-len <int>                      Maximum sequence length in tokens (default: 512)");
         Console.WriteLine("  -b, --batch-size <int>               Batch size (default: 1)");
         Console.WriteLine("  --grad-accum <int>                   Gradient accumulation steps (default: 4)");
+        Console.WriteLine("  --device <auto|cuda|cpu>             Compute target accelerator (default: auto)");
         Console.WriteLine("  --merge <output.gguf>                Automatically fuse adapter into standalone GGUF on completion");
     }
 }
