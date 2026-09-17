@@ -45,9 +45,9 @@
 
   <ItemGroup>
     <PackageReference Include="Glacier.Serve" Version="1.1.0" />
-    <PackageReference Include="Glacier.Rag" Version="1.0.0" />
+    <PackageReference Include="Glacier.Rag" Version="1.0.1" />
     <PackageReference Include="Glacier.Graph" Version="1.0.3" />
-    <PackageReference Include="Glacier.Vector" Version="1.0.4" />
+    <PackageReference Include="Glacier.Vector" Version="1.0.5" />
     <PackageReference Include="Glacier.Tensor" Version="1.0.6" />
     <PackageReference Include="Glacier.Polaris" Version="1.0.16" />
     <PackageReference Include="Glacier.Gpu" Version="1.0.6" />
