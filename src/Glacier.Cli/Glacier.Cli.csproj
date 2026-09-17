@@ -40,7 +40,7 @@
     <ProjectReference Include="..\..\..\Glacier.Tune\src\Glacier.Tune\Glacier.Tune.csproj" />
   </ItemGroup>
   <ItemGroup Condition="!Exists('..\..\..\Glacier.Tune\src\Glacier.Tune\Glacier.Tune.csproj')">
-    <PackageReference Include="Glacier.Tune" Version="1.0.3" />
+    <PackageReference Include="Glacier.Tune" Version="1.0.4" />
   </ItemGroup>
 
   <ItemGroup>
