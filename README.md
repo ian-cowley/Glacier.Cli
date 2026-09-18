@@ -8,10 +8,11 @@
 
 **One single global CLI tool replacing Ollama, vLLM, HuggingFace CLI, Unsloth, and RAGFlow.**
 
-[![NuGet](https://img.shields.io/badge/nuget-v1.0.0-0078D4?logo=nuget)](https://www.nuget.org/packages/Glacier.Cli)
-[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
-[![AOT Ready](https://img.shields.io/badge/Native%20AOT-Compatible-blue.svg)](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/)
+[![Native AOT](https://img.shields.io/badge/Native%20AOT-Ready-brightgreen.svg)](https://learn.microsoft.com/dotnet/core/deploying/native-aot/)
+[![NuGet Version](https://img.shields.io/nuget/v/Glacier.Cli.svg)](https://www.nuget.org/packages/Glacier.Cli/)
+[![Ecosystem](https://img.shields.io/badge/Glacier-Ecosystem-blue)](https://github.com/ian-cowley)
 
 </div>
 
