@@ -99,5 +99,13 @@ glacier pull lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF
 
 ---
 
+## 🆕 What's New in v1.0.1
+
+- **`PublishAot=true`** — produces a single-file native binary with zero .NET runtime dependency for instant startup on Windows, Linux, and macOS.
+- **Purged unused ASP.NET Core framework reference** — reduces the published binary size by removing the `Microsoft.AspNetCore.App` framework dependency.
+- **19 tests** passing (100 %).
+
+---
+
 ## 📄 License
 MIT License. High-Performance Pure C# .NET 10 Ecosystem.
