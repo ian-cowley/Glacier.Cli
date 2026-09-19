@@ -107,5 +107,12 @@ glacier pull lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF
 
 ---
 
+## Credits
+
+Developed by **Ian Cowley** and **Antigravity (Google DeepMind)**.
+
+---
+
 ## 📄 License
 MIT License. High-Performance Pure C# .NET 10 Ecosystem.
+
