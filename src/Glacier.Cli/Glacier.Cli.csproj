@@ -12,18 +12,18 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>glacier</ToolCommandName>
     <PackageId>Glacier.Cli</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <PublishAot>true</PublishAot>
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <Authors>Ian Cowley</Authors>
     <Company>Glacier High-Performance Ecosystem</Company>
-    <Description>Unified pure C# .NET 10 LLM command-line application (glacier). High-performance inference with Universal Architecture Matrix (Llama 3, Phi-4, DeepSeek, Mistral, Qwen), in-process LoRA fine-tuning (Glacier.Tune), GGUF adapter fusion, in-process SIMD GraphRAG (Glacier.Rag), PagedAttention continuous batching server (Glacier.Serve), and HuggingFace GGUF model downloader.</Description>
+    <Description>Unified pure C# .NET 10 LLM command-line application (glacier). High-performance inference with Universal Architecture Matrix (Llama 3, Phi-4, DeepSeek, Mistral, Qwen), in-process LoRA fine-tuning (Glacier.Tune), GGUF adapter fusion, in-process SIMD GraphRAG (Glacier.Rag), PagedAttention continuous batching server (Glacier.Serve), autonomous agent runtime (Glacier.Agent), and HuggingFace GGUF model downloader.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/ian-cowley/Glacier.Cli</PackageProjectUrl>
     <RepositoryUrl>https://github.com/ian-cowley/Glacier.Cli.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>llm;inference;fine-tuning;lora;graphrag;continuous-batching;paged-attention;ollama;vllm;cli;net10;glacier</PackageTags>
+    <PackageTags>llm;inference;fine-tuning;lora;graphrag;continuous-batching;paged-attention;ollama;vllm;agent;cli;net10;glacier</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
@@ -31,21 +31,9 @@
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <ItemGroup Condition="Exists('..\..\..\Glacier.Inference\src\Glacier.Inference\Glacier.Inference.csproj')">
-    <ProjectReference Include="..\..\..\Glacier.Inference\src\Glacier.Inference\Glacier.Inference.csproj" />
-  </ItemGroup>
-  <ItemGroup Condition="!Exists('..\..\..\Glacier.Inference\src\Glacier.Inference\Glacier.Inference.csproj')">
-    <PackageReference Include="Glacier.Inference" Version="1.2.2" />
-  </ItemGroup>
-
-  <ItemGroup Condition="Exists('..\..\..\Glacier.Tune\src\Glacier.Tune\Glacier.Tune.csproj')">
-    <ProjectReference Include="..\..\..\Glacier.Tune\src\Glacier.Tune\Glacier.Tune.csproj" />
-  </ItemGroup>
-  <ItemGroup Condition="!Exists('..\..\..\Glacier.Tune\src\Glacier.Tune\Glacier.Tune.csproj')">
-    <PackageReference Include="Glacier.Tune" Version="1.0.5" />
-  </ItemGroup>
-
   <ItemGroup>
+    <PackageReference Include="Glacier.Inference" Version="1.2.2" />
+    <PackageReference Include="Glacier.Tune" Version="1.0.5" />
     <PackageReference Include="Glacier.Serve" Version="1.1.1" />
     <PackageReference Include="Glacier.Rag" Version="1.0.2" />
     <PackageReference Include="Glacier.Graph" Version="1.0.4" />
@@ -53,5 +41,6 @@
     <PackageReference Include="Glacier.Tensor" Version="1.0.7" />
     <PackageReference Include="Glacier.Polaris" Version="1.0.17" />
     <PackageReference Include="Glacier.Gpu" Version="1.0.7" />
+    <PackageReference Include="Glacier.Agent" Version="1.0.0" />
   </ItemGroup>
 </Project>

@@ -43,6 +43,7 @@ public static class Program
                 "rag" => await RagCommandHandler.ExecuteAsync(cmdArgs),
                 "serve" => await ServeCommandHandler.ExecuteAsync(cmdArgs),
                 "pull" => await PullCommandHandler.ExecuteAsync(cmdArgs),
+                "agent" => await AgentCommandHandler.ExecuteAsync(cmdArgs),
                 "inspect" => DiagnosticsCommandHandlers.RunInspect(cmdArgs),
                 "devices" => DiagnosticsCommandHandlers.RunDevices(cmdArgs),
                 "bench" => await DiagnosticsCommandHandlers.RunBenchAsync(cmdArgs),
@@ -93,6 +94,7 @@ public static class Program
         Console.WriteLine("  rag     --model <gguf> --docs <dir>  In-process SIMD Vector + CSR GraphRAG query");
         Console.WriteLine("  serve   <model.gguf> [options]       Start drop-in Ollama/OpenAI PagedAttention server");
         Console.WriteLine("  pull    <repo-or-url> [options]      High-speed chunked GGUF download with live progress");
+        Console.WriteLine("  agent   <prompt>                     Execute autonomous agent task with Glacier.Agent");
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.Yellow;
         Console.WriteLine("Diagnostics & Benchmarks:");
@@ -111,6 +113,9 @@ public static class Program
     {
         switch (command.ToLowerInvariant())
         {
+            case "agent":
+                AgentCommandHandler.PrintHelp();
+                break;
             case "run":
                 RunCommandHandler.PrintHelp();
                 break;

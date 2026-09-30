@@ -47,6 +47,7 @@ public class CliIntegrationTests
     [InlineData("rag")]
     [InlineData("serve")]
     [InlineData("pull")]
+    [InlineData("agent")]
     [InlineData("devices")]
     [InlineData("inspect")]
     [InlineData("bench")]
@@ -221,5 +222,26 @@ public class CliIntegrationTests
         Assert.NotEmpty(result.DiscoveredEntities);
         Assert.NotEmpty(result.VectorMatches);
         Assert.Contains("PagedAttention", result.SynthesizedContext);
+    }
+
+    [Fact]
+    public async Task AgentCommand_ExecutesAutonomousPrompt()
+    {
+        var sw = new StringWriter();
+        var origOut = Console.Out;
+        Console.SetOut(sw);
+
+        try
+        {
+            int code = await Program.Main(["agent", "Test prompt execution"]);
+            Assert.Equal(0, code);
+            string output = sw.ToString();
+            Assert.Contains("GLACIER.AGENT - Autonomous Agent Runtime", output);
+            Assert.Contains("Completed in", output);
+        }
+        finally
+        {
+            Console.SetOut(origOut);
+        }
     }
 }
