@@ -32,15 +32,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Glacier.Inference" Version="1.2.2" />
+    <PackageReference Include="Glacier.Inference" Version="1.2.3" />
     <PackageReference Include="Glacier.Tune" Version="1.0.5" />
-    <PackageReference Include="Glacier.Serve" Version="1.1.1" />
+    <PackageReference Include="Glacier.Serve" Version="1.1.2" />
     <PackageReference Include="Glacier.Rag" Version="1.0.2" />
     <PackageReference Include="Glacier.Graph" Version="1.0.4" />
     <PackageReference Include="Glacier.Vector" Version="1.0.7" />
-    <PackageReference Include="Glacier.Tensor" Version="1.0.7" />
-    <PackageReference Include="Glacier.Polaris" Version="1.0.17" />
-    <PackageReference Include="Glacier.Gpu" Version="1.0.7" />
+    <PackageReference Include="Glacier.Tensor" Version="1.0.9" />
+    <PackageReference Include="Glacier.Polaris" Version="1.0.19" />
+    <PackageReference Include="Glacier.Gpu" Version="1.0.8" />
     <PackageReference Include="Glacier.Agent" Version="1.0.0" />
   </ItemGroup>
 </Project>
