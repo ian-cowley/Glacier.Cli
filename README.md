@@ -43,7 +43,7 @@ dotnet tool install -g Glacier.Cli
 | Command | Purpose | Benchmark / Highlight |
 | :--- | :--- | :--- |
 | **`glacier run`** | Instant GPU/CPU streaming inference & REPL | **<15ms cold start**, AVX-512 & Bare-Metal SASS (>64 tok/s generation) |
-| **`glacier tune`** | In-process PEFT LoRA fine-tuning | **6.96s / step (46 tok/s @ 320 ctx)** / **15.98s (32 tok/s @ 512 ctx)** on RTX 4060 |
+| **`glacier tune`** | In-process PEFT LoRA fine-tuning | **6.96s / step (46 tok/s, 320 tokens/step, 10-step run)** on RTX 4060 |
 | **`glacier merge`** | Zero-copy GGUF adapter fusion | **< 60s** (6.82s physical fusion) lossless Q8_0 fusion |
 | **`glacier rag`** | SIMD Vector + CSR Knowledge Graph RAG | **< 10ms end-to-end (27–29 µs in-process scan)**, zero-copy graph traversal |
 | **`glacier serve`** | Ollama & OpenAI HTTP continuous batching | **PagedAttention**, 17,046 req/s socket turnaround (7.2M req/s pipeline capacity) |
@@ -102,7 +102,7 @@ glacier pull lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF
 ## 🆕 What's New in v1.0.3
 
 - **Expanded CLI Argument & Validation Test Suite** — added `CliArgumentParsingTests.cs` verifying argument constraints, missing flags, error codes, and hardware device discovery.
-- **Reconciled Benchmark Telemetry** — aligned documentation metrics distinguishing context length variations (320 ctx vs 512 ctx) and in-memory vs network loopback throughput.
+- **Reconciled Benchmark Telemetry** — README figures now cite the measured 10-step LoRA run (6.96 s/step, 320 tokens/step) and separate in-memory from loopback throughput.
 - **Hardened Console Synchronization** — ensured deterministic sequential test execution with zero `Console.Out` contention under xUnit parallel test execution.
 - **28 tests** passing (100%).
 
