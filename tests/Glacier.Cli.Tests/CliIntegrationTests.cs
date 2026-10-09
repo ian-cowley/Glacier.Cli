@@ -8,6 +8,7 @@ using Glacier.Cli.Commands;
 using Glacier.Rag.Engine;
 using Xunit;
 
+[Collection("ConsoleTests")]
 public class CliIntegrationTests
 {
     [Fact]
