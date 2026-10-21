@@ -128,7 +128,7 @@ public static class TuneCommandHandler
         Console.WriteLine("================================================================================");
         Console.WriteLine("               GLACIER.TUNE - Pure C# .NET 10 LLM Fine-Tuning                   ");
         Console.WriteLine("================================================================================");
-        Glacier.Tune.Diagnostics.GlacierDiagnostics.Logger = new Glacier.Tune.Diagnostics.ConsoleGlacierLogger(Glacier.Tune.Diagnostics.LogLevel.Information);
+        Console.ResetColor();
 
         var loraConfig = new LoraConfig
         {
