@@ -19,12 +19,25 @@ public static class MergeCommandHandler
         string adapterBin = args[1];
         string outGguf = args[2];
         int threads = Environment.ProcessorCount;
+        TargetQuantization quant = TargetQuantization.Q4_K;
 
         for (int i = 3; i < args.Length; i++)
         {
             if (args[i] is "-t" or "--threads" && i + 1 < args.Length)
             {
                 threads = int.Parse(args[++i]);
+            }
+            else if (args[i] is "-q" or "--quant" && i + 1 < args.Length)
+            {
+                string qStr = args[++i].ToLowerInvariant();
+                quant = qStr switch
+                {
+                    "q4_k" or "q4_k_m" => TargetQuantization.Q4_K,
+                    "q4_0" => TargetQuantization.Q4_0,
+                    "q8_0" => TargetQuantization.Q8_0,
+                    "auto" => TargetQuantization.Auto,
+                    _ => TargetQuantization.Q4_K
+                };
             }
         }
 
@@ -53,12 +66,14 @@ public static class MergeCommandHandler
         Console.WriteLine($"  Base Model:    {baseGguf}");
         Console.WriteLine($"  LoRA Adapter:  {adapterBin}");
         Console.WriteLine($"  Target Output: {outGguf}");
+        Console.WriteLine($"  Quantization:  {quant}");
         Console.WriteLine($"  Threads:       {threads} (AVX-512 / AVX2 SIMD)\n");
 
         var sw = Stopwatch.StartNew();
         var options = new GgufMerger.MergeOptions
         {
             MaxDegreeOfParallelism = threads,
+            TargetQuantization = quant,
             ProgressCallback = msg => Console.WriteLine($"  {msg}")
         };
 
@@ -85,9 +100,10 @@ public static class MergeCommandHandler
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  -t, --threads <int>                  Number of worker threads (default: ProcessorCount)");
+        Console.WriteLine("  -q, --quant <q4_k|q4_0|q8_0|auto>   Target quantization representation (default: q4_k)");
         Console.WriteLine();
         Console.WriteLine("Description:");
-        Console.WriteLine("  Fuses low-rank Delta W matrices into target Q4_K/Q8_0 layers with loss-free Q8_0");
+        Console.WriteLine("  Fuses low-rank Delta W matrices into target Q4_K/Q4_0/Q8_0 layers with high-fidelity");
         Console.WriteLine("  quantization while keeping all other layers and GGUF metadata bit-for-bit intact.");
     }
 }
