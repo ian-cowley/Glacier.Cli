@@ -1,13 +1,37 @@
 #!/usr/bin/env bash
 # Glacier CLI Automated Installer for Linux and macOS
-set -e
+set -euo pipefail
 
 INSTALL_DIR="${HOME}/.glacier/bin"
 EXE_TARGET="${INSTALL_DIR}/glacier"
-DOWNLOAD_URL="https://github.com/ian-cowley/Glacier.Cli/releases/latest/download/glacier-linux-x64.tar.gz"
+
+UNAME_S="$(uname -s)"
+UNAME_M="$(uname -m)"
+
+case "${UNAME_S}" in
+    Linux*)  OS_ID="linux" ;;
+    Darwin*) OS_ID="osx" ;;
+    *)
+        echo "Unsupported OS '${UNAME_S}'. Falling back to dotnet tool install..."
+        dotnet tool update -g Glacier.Cli || dotnet tool install -g Glacier.Cli
+        exit 0
+        ;;
+esac
+
+case "${UNAME_M}" in
+    x86_64|amd64)  ARCH_ID="x64" ;;
+    aarch64|arm64) ARCH_ID="arm64" ;;
+    *)
+        echo "Unsupported architecture '${UNAME_M}'. Falling back to dotnet tool install..."
+        dotnet tool update -g Glacier.Cli || dotnet tool install -g Glacier.Cli
+        exit 0
+        ;;
+esac
+
+DOWNLOAD_URL="https://github.com/ian-cowley/Glacier.Cli/releases/latest/download/glacier-${OS_ID}-${ARCH_ID}.tar.gz"
 
 echo "======================================================================"
-echo "  GLACIER CLI: The World-Leading Pure C# .NET 10 AI Platform"
+echo "  GLACIER CLI: Pure C# .NET 10 AI Platform (${OS_ID}-${ARCH_ID})"
 echo "======================================================================"
 
 mkdir -p "${INSTALL_DIR}"
@@ -15,21 +39,22 @@ mkdir -p "${INSTALL_DIR}"
 echo ""
 echo "[1/3] Downloading latest Glacier CLI..."
 TMP_TAR=$(mktemp /tmp/glacier.XXXXXX.tar.gz)
-curl -fsSL "${DOWNLOAD_URL}" -o "${TMP_TAR}" || {
-    echo "Direct download failed. Falling back to dotnet tool install..."
-    dotnet tool install -g Glacier.Cli
+trap 'rm -f "${TMP_TAR}"' EXIT
+
+if ! curl -fsSL "${DOWNLOAD_URL}" -o "${TMP_TAR}"; then
+    echo "Release archive not available for ${OS_ID}-${ARCH_ID}. Installing via .NET Global Tool..."
+    dotnet tool update -g Glacier.Cli || dotnet tool install -g Glacier.Cli
     exit 0
-}
+fi
 
 tar -xzf "${TMP_TAR}" -C "${INSTALL_DIR}"
-rm -f "${TMP_TAR}"
 chmod +x "${EXE_TARGET}"
 
 echo "[2/3] Configuring PATH in shell profiles..."
 SHELL_CONFIG=""
-if [ -n "$ZSH_VERSION" ] || [ -f "$HOME/.zshrc" ]; then
+if [ -n "${ZSH_VERSION:-}" ] || [ -f "$HOME/.zshrc" ]; then
     SHELL_CONFIG="$HOME/.zshrc"
-elif [ -n "$BASH_VERSION" ] || [ -f "$HOME/.bashrc" ]; then
+elif [ -n "${BASH_VERSION:-}" ] || [ -f "$HOME/.bashrc" ]; then
     SHELL_CONFIG="$HOME/.bashrc"
 fi
 
@@ -42,10 +67,10 @@ fi
 
 echo "[3/3] Verifying installation..."
 export PATH="$HOME/.glacier/bin:$PATH"
-glacier --help > /dev/null 2>&1 || true
+"${EXE_TARGET}" --help > /dev/null
 
 echo "======================================================================"
-echo "  🎉 SUCCESS: Glacier CLI is installed to ${EXE_TARGET}"
+echo "  SUCCESS: Glacier CLI is installed to ${EXE_TARGET}"
 echo "======================================================================"
 echo "Quickstart: restart your terminal, then run:"
 echo "  glacier devices"

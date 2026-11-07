@@ -10,14 +10,16 @@ using Glacier.Serve.Server;
 
 public static class ServeCommandHandler
 {
-    public static async Task<int> ExecuteAsync(string[] args)
-    {
-        if (args.Length == 0)
-        {
-            PrintHelp();
-            return 1;
-        }
+    public sealed record ServeCliOptions(
+        string? ModelPath,
+        string Host,
+        int Port,
+        int TotalBlocks,
+        int MaxBatch,
+        string? ModelName);
 
+    public static ServeCliOptions ParseOptions(string[] args)
+    {
         string? modelPath = null;
         int port = 11434;
         string host = "127.0.0.1";
@@ -52,11 +54,29 @@ public static class ServeCommandHandler
             {
                 modelName = args[++i];
             }
-            else if (modelPath == null && !arg.StartsWith("-"))
+            else if (modelPath == null && !arg.StartsWith('-'))
             {
                 modelPath = arg;
             }
         }
+
+        return new ServeCliOptions(modelPath, host, port, totalBlocks, maxBatch, modelName);
+    }
+
+    public static async Task<int> ExecuteAsync(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            PrintHelp();
+            return 1;
+        }
+
+        ServeCliOptions opts = ParseOptions(args);
+        string? modelPath = opts.ModelPath;
+        string host = opts.Host;
+        int port = opts.Port;
+        int totalBlocks = opts.TotalBlocks;
+        int maxBatch = opts.MaxBatch;
 
         if (string.IsNullOrEmpty(modelPath))
         {
@@ -74,7 +94,7 @@ public static class ServeCommandHandler
             return 1;
         }
 
-        modelName ??= Path.GetFileNameWithoutExtension(modelPath).ToLowerInvariant();
+        string modelName = opts.ModelName ?? Path.GetFileNameWithoutExtension(modelPath).ToLowerInvariant();
 
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("╔═══════════════════════════════════════════════════════════════════════════════╗");
@@ -102,6 +122,7 @@ public static class ServeCommandHandler
 
         using var engine = new ContinuousBatchEngine(modelPath, totalKvBlocks: totalBlocks, maxBatchSize: maxBatch);
         using var app = GlacierServeApp.CreateBuilder()
+            .UseHost(host)
             .UsePort(port)
             .Build();
 

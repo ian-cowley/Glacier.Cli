@@ -4,7 +4,6 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
-using Glacier.Inference.Config;
 using Glacier.Inference.Engine;
 using Glacier.Inference.Sampling;
 using Glacier.Rag.Engine;
@@ -47,6 +46,14 @@ public static class RagCommandHandler
             {
                 maxTokens = int.Parse(args[++i]);
             }
+        }
+
+        if (!string.IsNullOrEmpty(modelPath) && !File.Exists(modelPath))
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"Error: Model file not found: {modelPath}");
+            Console.ResetColor();
+            return 1;
         }
 
         Console.ForegroundColor = ConsoleColor.Cyan;
@@ -100,10 +107,15 @@ public static class RagCommandHandler
         Console.WriteLine($"  ✓ Graph Knowledge Nodes: {ragEngine.GraphNodeCount:N0} nodes | {ragEngine.GraphEdgeCount:N0} edges");
         Console.WriteLine($"  ✓ Vector Index:          {ragEngine.IndexedChunksCount:N0} semantic embeddings\n");
 
+        // Hoist InferenceSession outside the interactive REPL loop so model weights & KV cache stay warm
+        using InferenceSession? session = !string.IsNullOrEmpty(modelPath)
+            ? new InferenceSession(modelPath, maxSeqLen: 4096)
+            : null;
+
         // 2. Query Loop or Single-Shot
         if (!string.IsNullOrEmpty(query))
         {
-            await ProcessQueryAsync(ragEngine, modelPath, query, topK, maxHops, maxTokens);
+            await ProcessQueryAsync(ragEngine, session, query, topK, maxHops, maxTokens);
             return 0;
         }
 
@@ -120,10 +132,11 @@ public static class RagCommandHandler
             Console.ResetColor();
 
             string? line = Console.ReadLine();
+            if (line is null) break;
             if (string.IsNullOrWhiteSpace(line)) continue;
             if (line.Trim().Equals("exit", StringComparison.OrdinalIgnoreCase)) break;
 
-            await ProcessQueryAsync(ragEngine, modelPath, line, topK, maxHops, maxTokens);
+            await ProcessQueryAsync(ragEngine, session, line, topK, maxHops, maxTokens);
         }
 
         return 0;
@@ -131,7 +144,7 @@ public static class RagCommandHandler
 
     private static async Task ProcessQueryAsync(
         GraphRagEngine ragEngine,
-        string? modelPath,
+        InferenceSession? session,
         string query,
         int topK,
         int maxHops,
@@ -150,7 +163,7 @@ public static class RagCommandHandler
         Console.WriteLine($"  ✓ Graph Relations:    {retrieval.GraphRelations.Count} structural hops traversed");
         Console.WriteLine($"  ✓ Top Vector Matches:   {retrieval.VectorMatches.Count} excerpts\n");
 
-        if (string.IsNullOrEmpty(modelPath) || !File.Exists(modelPath))
+        if (session is null)
         {
             Console.ForegroundColor = ConsoleColor.DarkCyan;
             Console.WriteLine("=== SYNTHESIZED HYBRID CONTEXT (Pass --model <gguf> to stream LLM answer) ===");
@@ -163,9 +176,7 @@ public static class RagCommandHandler
         Console.WriteLine("=== STREAMING GROUNDED LLM GENERATION ===");
         string prompt = ragEngine.BuildAugmentedPrompt(query, retrieval);
 
-        using var session = new InferenceSession(modelPath, maxSeqLen: 4096);
         var sampling = new SamplingOptions { MaxTokens = maxTokens, Temperature = 0.2f };
-
         var genResult = await session.GenerateAsync(
             prompt,
             sampling,

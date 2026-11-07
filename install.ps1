@@ -8,16 +8,16 @@ param (
 $ErrorActionPreference = "Stop"
 
 Write-Host "======================================================================" -ForegroundColor Cyan
-Write-Host "  GLACIER CLI: The World-Leading Pure C# .NET 10 AI Platform" -ForegroundColor Cyan
+Write-Host "  GLACIER CLI: Pure C# .NET 10 AI Platform" -ForegroundColor Cyan
 Write-Host "======================================================================" -ForegroundColor Cyan
 
 if ($Uninstall) {
     Write-Host "`n[Glacier Installer] Uninstalling Glacier CLI..." -ForegroundColor Yellow
-    if (Test-Path "$InstallDir\glacier.exe") {
-        Remove-Item "$InstallDir\glacier.exe" -Force -ErrorAction SilentlyContinue
-        Write-Host "  [OK] Removed: $InstallDir\glacier.exe" -ForegroundColor Green
+    if (Test-Path $InstallDir) {
+        Remove-Item "$InstallDir\*" -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "  [OK] Cleared: $InstallDir" -ForegroundColor Green
     }
-    
+
     $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
     if ($UserPath -like "*$InstallDir*") {
         $NewPath = ($UserPath -split ";" | Where-Object { $_ -ne $InstallDir -and $_ -ne "" }) -join ";"
@@ -28,21 +28,19 @@ if ($Uninstall) {
     return
 }
 
-# 1. Create Target Directory
 if (!(Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 
 $ExeTarget = Join-Path $InstallDir "glacier.exe"
+$ScriptDir = if ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { "" }
+$LocalDistDir = if ($ScriptDir) { Join-Path $ScriptDir "dist\win-x64" } else { "" }
+$LocalDistExe = if ($LocalDistDir) { Join-Path $LocalDistDir "glacier.exe" } else { "" }
 
-# 2. Copy local build or download from GitHub release
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue
-$LocalDistExe = Join-Path $ScriptDir "dist\win-x64\glacier.exe"
-
-if (Test-Path $LocalDistExe) {
-    Write-Host "`n[1/3] Copying local standalone binary to $InstallDir..." -ForegroundColor Yellow
-    Copy-Item $LocalDistExe -Destination $ExeTarget -Force
-    Write-Host "  [OK] Standalone binary copied." -ForegroundColor Green
+if ($LocalDistExe -and (Test-Path $LocalDistExe)) {
+    Write-Host "`n[1/3] Copying local distribution files to $InstallDir..." -ForegroundColor Yellow
+    Copy-Item "$LocalDistDir\*" -Destination $InstallDir -Recurse -Force
+    Write-Host "  [OK] Local distribution copied." -ForegroundColor Green
 } else {
     Write-Host "`n[1/3] Downloading latest Glacier CLI from GitHub Releases..." -ForegroundColor Yellow
     $DownloadUrl = "https://github.com/ian-cowley/Glacier.Cli/releases/latest/download/glacier-win-x64.zip"
@@ -57,12 +55,14 @@ if (Test-Path $LocalDistExe) {
     } catch {
         Write-Warning "Could not download from GitHub release ($($_.Exception.Message))."
         Write-Host "Fallback: Installing via .NET Global Tool..." -ForegroundColor Yellow
-        dotnet tool install -g Glacier.Cli --ignore-failed-sources
+        dotnet tool update -g Glacier.Cli --ignore-failed-sources
+        if ($LASTEXITCODE -ne 0) {
+            dotnet tool install -g Glacier.Cli --ignore-failed-sources
+        }
         return
     }
 }
 
-# 3. Permanently Register into User PATH
 Write-Host "`n[2/3] Configuring Environment Variables..." -ForegroundColor Yellow
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($UserPath -notlike "*$InstallDir*") {
@@ -74,9 +74,9 @@ if ($UserPath -notlike "*$InstallDir*") {
     Write-Host "  [OK] PATH already includes '$InstallDir'." -ForegroundColor Green
 }
 
-# 4. Verification
 Write-Host "`n[3/3] Verifying Glacier CLI Installation..." -ForegroundColor Yellow
 if (Test-Path $ExeTarget) {
+    & $ExeTarget --help | Out-Null
     Write-Host "`n======================================================================" -ForegroundColor Green
     Write-Host "  SUCCESS: Glacier CLI is installed and ready to use!" -ForegroundColor Green
     Write-Host "  Binary Location: $ExeTarget" -ForegroundColor Gray
@@ -85,7 +85,7 @@ if (Test-Path $ExeTarget) {
     Write-Host "  glacier devices                                    # Audit NVIDIA/AMD/CPU accelerators"
     Write-Host "  glacier pull Qwen/Qwen2.5-7B-Instruct-GGUF         # Download foundation model"
     Write-Host "  glacier run model.gguf `"Explain relativity`"        # Instant GPU/CPU inference"
-    Write-Host "  glacier tune model.gguf --data data.jsonl          # In-process 20-min fine-tuning"
+    Write-Host "  glacier tune model.gguf --data data.jsonl          # In-process LoRA fine-tuning"
     Write-Host "  glacier serve model.gguf --port 11434              # PagedAttention OpenAI server`n"
 } else {
     Write-Error "Installation failed: $ExeTarget not found."

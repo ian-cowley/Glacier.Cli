@@ -6,11 +6,10 @@
 
 ### 🚀 **< 15ms** Cold Start &nbsp;|&nbsp; ⚡ **Zero** Python / C++ &nbsp;|&nbsp; 💎 **100% Pure C# .NET 10**
 
-**One single global CLI tool replacing Ollama, vLLM, HuggingFace CLI, Unsloth, and RAGFlow.**
+**One global .NET 10 CLI tool for GGUF inference, LoRA fine-tuning, adapter fusion, GraphRAG, PagedAttention serving, and autonomous agents.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
-[![Native AOT](https://img.shields.io/badge/Native%20AOT-Ready-brightgreen.svg)](https://learn.microsoft.com/dotnet/core/deploying/native-aot/)
 [![NuGet Version](https://img.shields.io/nuget/v/Glacier.Cli.svg)](https://www.nuget.org/packages/Glacier.Cli/)
 [![Ecosystem](https://img.shields.io/badge/Glacier-Ecosystem-blue)](https://github.com/ian-cowley)
 [![Website](https://img.shields.io/badge/Website-glaciersoftware.dev-66fcf1.svg)](https://glaciersoftware.dev/)
@@ -22,34 +21,34 @@
 
 ## ⚡ Install in One Command
 
-### 🪟 Windows (PowerShell One-Liner):
+### 📦 Via .NET 10 Global Tool (Recommended):
+```bash
+dotnet tool install -g Glacier.Cli
+```
+
+### 🪟 Windows (PowerShell):
 ```powershell
 irm https://raw.githubusercontent.com/ian-cowley/Glacier.Cli/main/install.ps1 | iex
 ```
-*Or download [`glacier-win-x64.zip`](https://github.com/ian-cowley/Glacier.Cli/releases/latest/download/glacier-win-x64.zip) and double-click `install.bat`.*
 
 ### 🐧 Linux & 🍎 macOS:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ian-cowley/Glacier.Cli/main/install.sh | bash
 ```
 
-### 📦 Via .NET 10 Global Tool:
-```bash
-dotnet tool install -g Glacier.Cli
-```
-
 ---
 
 ## 🎯 The Universal Command Matrix
 
-| Command | Purpose | Benchmark / Highlight |
+| Command | Purpose | Highlight |
 | :--- | :--- | :--- |
-| **`glacier run`** | Instant GPU/CPU streaming inference & REPL | **<15ms cold start**, AVX-512 & Bare-Metal SASS (>64 tok/s generation) |
-| **`glacier tune`** | In-process PEFT LoRA fine-tuning | **6.96s / step (46 tok/s, 320 tokens/step, 10-step run)** on RTX 4060 |
-| **`glacier merge`** | Zero-copy GGUF adapter fusion | **< 60s** (6.82s physical fusion) lossless Q8_0 fusion |
-| **`glacier rag`** | SIMD Vector + CSR Knowledge Graph RAG | **< 10ms end-to-end (27–29 µs in-process scan)**, zero-copy graph traversal |
-| **`glacier serve`** | Ollama & OpenAI HTTP continuous batching | **PagedAttention**, 17,046 req/s socket turnaround (7.2M req/s pipeline capacity) |
-| **`glacier pull`** | High-speed chunked GGUF downloader | Multi-threaded download with live ETA & speed gauge |
+| **`glacier run`** | Instant GPU/CPU streaming inference & REPL | AVX-512, DirectML, Vulkan, and Native Driver execution |
+| **`glacier tune`** | In-process PEFT LoRA fine-tuning | 6.96s / step (46 tok/s, 320 tokens/step, 10-step run) on RTX 4060 |
+| **`glacier merge`** | Zero-copy GGUF adapter fusion | Lossless Q8_0 / F16 delta fusion into standalone GGUF |
+| **`glacier rag`** | SIMD Vector + CSR Knowledge Graph RAG | Persistent REPL session reuse with hybrid vector + CSR graph hops |
+| **`glacier serve`** | Ollama & OpenAI HTTP continuous batching | PagedAttention server with configurable `--host` and `--port` |
+| **`glacier pull`** | High-speed chunked GGUF downloader | `HF_TOKEN` auth, HTTP `Range` `.part` resume, strict `GGUF` verification |
+| **`glacier agent`** | Autonomous pure C# agent execution | Multi-step LLM tool loop (`--model`) & zero-reflection built-in tools |
 
 ---
 
@@ -66,7 +65,7 @@ glacier run model.gguf
 
 ### 2. In-Process Fine-Tuning & Adapter Export
 ```bash
-# Fine-tune directly in pure .NET 10 (GPU VRAM-resident + AVX-512)
+# Fine-tune directly in pure .NET 10
 glacier tune base.gguf --data dataset.jsonl --epochs 3 --rank 16 --out adapter.bin
 
 # Fuse LoRA adapter directly into a standalone production GGUF
@@ -82,31 +81,41 @@ glacier rag --model model.gguf --docs ./knowledge --query "What is our architect
 ### 4. Continuous Batching Server (Drop-in Ollama & OpenAI)
 ```bash
 # Serves POST /v1/chat/completions (OpenAI) and POST /api/chat (Ollama)
-glacier serve model.gguf --port 11434 --blocks 1024 --batch-size 16
+glacier serve model.gguf --host 127.0.0.1 --port 11434 --blocks 1024 --batch-size 16
 ```
 
 ### 5. Download Foundation Models
 ```bash
-# Pull directly from HuggingFace with live progress tracking
+# Pull directly from HuggingFace (set HF_TOKEN for gated models)
 glacier pull lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF
+```
+
+### 6. Autonomous Agent Execution
+```bash
+# Execute multi-step autonomous tool loop backed by a local GGUF model
+glacier agent --model model.gguf "Inspect available GPU accelerators"
+
+# Or invoke built-in pure C# tools directly
+glacier agent "CALL devices: {}"
 ```
 
 ---
 
 ## 🖥️ Hardware & Model Compatibility
 
-- **Hardware Acceleration**: NVIDIA RTX 40/30 series (Pure C# SASS / HIP / Vulkan), AMD Radeon 890M / RDNA3 (DirectML / HIP), Host CPUs (SIMD AVX-512 & AVX2).
+- **Hardware Acceleration**: NVIDIA RTX 40/30 series, AMD RDNA3 (DirectML / Vulkan / HIP), Host CPUs (SIMD AVX-512 & AVX2).
 - **Supported Architectures**: Meta Llama 3/3.1/3.2/3.3, Microsoft Phi-4/Phi-3, DeepSeek-V2/V3/R1, Mistral/Devstral, Alibaba Qwen 2/2.5.
 - **Quantization Types**: `Q4_K_M`, `Q5_K_M`, `Q6_K`, `Q8_0`, `Q4_0`, `MXFP4`, `F16`, `F32`.
 
 ---
 
-## 🆕 What's New in v1.0.3
+## 🆕 What's New in v1.1.0
 
-- **Expanded CLI Argument & Validation Test Suite** — added `CliArgumentParsingTests.cs` verifying argument constraints, missing flags, error codes, and hardware device discovery.
-- **Reconciled Benchmark Telemetry** — README figures now cite the measured 10-step LoRA run (6.96 s/step, 320 tokens/step) and separate in-memory from loopback throughput.
-- **Hardened Console Synchronization** — ensured deterministic sequential test execution with zero `Console.Out` contention under xUnit parallel test execution.
-- **28 tests** passing (100%).
+- **Hardened `glacier pull` Downloader** — added `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN` Bearer authentication, strict path-traversal containment, `.part` HTTP `Range` resume on `206 Partial Content`, redirected-console cursor safety, and fail-closed `GGUF` magic verification.
+- **Persistent `glacier rag` Session Reuse** — hoisted `InferenceSession` outside the interactive REPL loop so model weights and KV caches remain warm across queries.
+- **Configurable `glacier serve --host` Binding** — wired `.UseHost(host)` directly into `GlacierServeApp` builder.
+- **Real `glacier agent` LLM Loop & Built-In Tools** — wired `IAgentChatModel` over `InferenceSession` (`--model`, `--max-steps`) and registered built-in pure C# tools (`ping`, `clock`, `devices`).
+- **Upgraded Ecosystem Dependencies & OIDC Publishing** — upgraded all Glacier Tier 0–3 packages (`Glacier.Inference 1.3.2`, `Glacier.Serve 1.2.0`, `Glacier.Rag 1.2.0`, `Glacier.Agent 1.1.0`, `Glacier.Polaris 1.1.0`) with `TreatWarningsAsErrors` and NuGet Trusted Publishing OIDC.
 
 ---
 

@@ -40,3 +40,9 @@ Thumbs.db
 # Scratch / working directories
 brain/
 scratch/
+[Tt]est[Rr]esults/
+
+# Secrets and local configuration
+appsettings*.json
+!appsettings.template.json
+*.env*
