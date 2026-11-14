@@ -21,7 +21,8 @@ public static class ServeCommandHandler
         int MaxBatch,
         string? ModelName,
         int SleepIdleSeconds = 300,
-        int SleepMinDreams = 1);
+        int SleepMinDreams = 1,
+        string? SleepCheckpointPath = null);
 
     public static ServeCliOptions ParseOptions(string[] args)
     {
@@ -33,6 +34,7 @@ public static class ServeCommandHandler
         string? modelName = null;
         int sleepIdleSeconds = 300;
         int sleepMinDreams = 1;
+        string? sleepCheckpointPath = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -69,13 +71,17 @@ public static class ServeCommandHandler
             {
                 sleepMinDreams = int.Parse(args[++i]);
             }
+            else if (arg is "--sleep-checkpoint" && i + 1 < args.Length)
+            {
+                sleepCheckpointPath = args[++i];
+            }
             else if (modelPath == null && !arg.StartsWith('-'))
             {
                 modelPath = arg;
             }
         }
 
-        return new ServeCliOptions(modelPath, host, port, totalBlocks, maxBatch, modelName, sleepIdleSeconds, sleepMinDreams);
+        return new ServeCliOptions(modelPath, host, port, totalBlocks, maxBatch, modelName, sleepIdleSeconds, sleepMinDreams, sleepCheckpointPath);
     }
 
     public static async Task<int> ExecuteAsync(string[] args)
@@ -149,7 +155,10 @@ public static class ServeCommandHandler
         if (opts.SleepIdleSeconds > 0)
         {
             const int sleepDim = 64;
-            sleepBank = new PreallocatedMoeExpansionBank(dimension: sleepDim, rank: 8, maxExperts: 8);
+            bool loadedFromCheckpoint = !string.IsNullOrWhiteSpace(opts.SleepCheckpointPath) && File.Exists(opts.SleepCheckpointPath);
+            sleepBank = loadedFromCheckpoint
+                ? PreallocatedMoeExpansionBank.Load(opts.SleepCheckpointPath!)
+                : new PreallocatedMoeExpansionBank(dimension: sleepDim, rank: 8, maxExperts: 8);
             sleepTrainer = new SleepConsolidationTrainer(sleepBank);
             sleepDaemon = new AutonomousSleepDaemon(
                 sleepTrainer,
@@ -157,9 +166,15 @@ public static class ServeCommandHandler
                     IdleThreshold: TimeSpan.FromSeconds(opts.SleepIdleSeconds),
                     PollingInterval: TimeSpan.FromSeconds(1),
                     MinDreamsToTriggerSleep: Math.Max(1, opts.SleepMinDreams)));
-            engine.AttachSleepDaemon(sleepDaemon, sleepDim, expansionRouter: sleepBank);
+            if (!string.IsNullOrWhiteSpace(opts.SleepCheckpointPath))
+            {
+                string ckptPath = opts.SleepCheckpointPath!;
+                sleepDaemon.ConsolidationCompleted += _ => sleepBank.Save(ckptPath);
+            }
+            engine.AttachSleepDaemon(sleepDaemon, sleepBank.Dimension, expansionRouter: sleepBank);
             sleepDaemon.Start();
-            Console.WriteLine($"  ✓ Sleep Memory:       Enabled (idle={opts.SleepIdleSeconds}s, minDreams={Math.Max(1, opts.SleepMinDreams)})\n");
+            string ckptNote = loadedFromCheckpoint ? $", restored={sleepBank.ActiveExpertCount} experts from {opts.SleepCheckpointPath}" : string.Empty;
+            Console.WriteLine($"  ✓ Sleep Memory:       Enabled (idle={opts.SleepIdleSeconds}s, minDreams={Math.Max(1, opts.SleepMinDreams)}{ckptNote})\n");
         }
 
         using var _sleepBankCleanup = sleepBank;
@@ -215,5 +230,6 @@ public static class ServeCommandHandler
         Console.WriteLine("  --name <string>                      Model tag alias (default: filename without extension)");
         Console.WriteLine("  --sleep-idle-seconds <int>           Idle seconds before Sleep consolidation (default: 300, 0=off)");
         Console.WriteLine("  --sleep-min-dreams <int>             Minimum dreams before auto-sleep triggers (default: 1)");
+        Console.WriteLine("  --sleep-checkpoint <path>            Persist/restore Sleep MoE expert weights to disk");
     }
 }

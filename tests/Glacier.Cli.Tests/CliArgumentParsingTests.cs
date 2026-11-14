@@ -145,12 +145,14 @@ public class CliArgumentParsingTests
             "model.gguf",
             "--port", "11435",
             "--sleep-idle-seconds", "120",
-            "--sleep-min-dreams", "4"
+            "--sleep-min-dreams", "4",
+            "--sleep-checkpoint", "sleep.gmoe"
         ]);
 
         Assert.Equal("model.gguf", opts.ModelPath);
         Assert.Equal(11435, opts.Port);
         Assert.Equal(120, opts.SleepIdleSeconds);
         Assert.Equal(4, opts.SleepMinDreams);
+        Assert.Equal("sleep.gmoe", opts.SleepCheckpointPath);
     }
 }

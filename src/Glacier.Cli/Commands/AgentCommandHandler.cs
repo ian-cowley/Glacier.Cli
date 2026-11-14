@@ -87,6 +87,15 @@ public static class AgentCommandHandler
 
         RegisterBuiltInTools(engine);
 
+        var episodicMemory = new Glacier.MemEx.MemExEngine();
+        engine.AttachEpisodicMemory(episodicMemory);
+
+        using var conformalRouter = new Glacier.Clavier.Engine.ClavierSession(
+            embeddingDim: 16,
+            hiddenDim: 16,
+            numActions: Math.Max(2, engine.Tools.Tools.Count));
+        engine.AttachConformalRouter(conformalRouter);
+
         engine.EventPublished += evt =>
         {
             Console.ForegroundColor = ConsoleColor.DarkGray;
