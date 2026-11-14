@@ -4,9 +4,12 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Glacier.Serve.Daemons;
 using Glacier.Serve.Inference.Batching;
 using Glacier.Serve.Inference.Http;
 using Glacier.Serve.Server;
+using Glacier.Tune.Expansion;
+using Glacier.Tune.Sleep;
 
 public static class ServeCommandHandler
 {
@@ -16,7 +19,9 @@ public static class ServeCommandHandler
         int Port,
         int TotalBlocks,
         int MaxBatch,
-        string? ModelName);
+        string? ModelName,
+        int SleepIdleSeconds = 300,
+        int SleepMinDreams = 1);
 
     public static ServeCliOptions ParseOptions(string[] args)
     {
@@ -26,6 +31,8 @@ public static class ServeCommandHandler
         int totalBlocks = 1024;
         int maxBatch = 16;
         string? modelName = null;
+        int sleepIdleSeconds = 300;
+        int sleepMinDreams = 1;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -54,13 +61,21 @@ public static class ServeCommandHandler
             {
                 modelName = args[++i];
             }
+            else if (arg is "--sleep-idle-seconds" && i + 1 < args.Length)
+            {
+                sleepIdleSeconds = int.Parse(args[++i]);
+            }
+            else if (arg is "--sleep-min-dreams" && i + 1 < args.Length)
+            {
+                sleepMinDreams = int.Parse(args[++i]);
+            }
             else if (modelPath == null && !arg.StartsWith('-'))
             {
                 modelPath = arg;
             }
         }
 
-        return new ServeCliOptions(modelPath, host, port, totalBlocks, maxBatch, modelName);
+        return new ServeCliOptions(modelPath, host, port, totalBlocks, maxBatch, modelName, sleepIdleSeconds, sleepMinDreams);
     }
 
     public static async Task<int> ExecuteAsync(string[] args)
@@ -118,9 +133,38 @@ public static class ServeCommandHandler
         Console.WriteLine($"  • GET   http://{host}:{port}/v1/models           (OpenAI models)");
         Console.WriteLine($"  • GET   http://{host}:{port}/api/tags            (Ollama tags)");
         Console.WriteLine($"  • GET   http://{host}:{port}/health              (Health JSON)");
-        Console.WriteLine($"  • GET   http://{host}:{port}/metrics             (Prometheus metrics)\n");
+        Console.WriteLine($"  • GET   http://{host}:{port}/metrics             (Prometheus metrics)");
+        if (opts.SleepIdleSeconds > 0)
+        {
+            Console.WriteLine($"  • GET   http://{host}:{port}/v1/sleep/status     (Sleep Memory state)");
+            Console.WriteLine($"  • POST  http://{host}:{port}/v1/sleep/trigger    (Trigger Sleep consolidation)");
+        }
+        Console.WriteLine();
 
         using var engine = new ContinuousBatchEngine(modelPath, totalKvBlocks: totalBlocks, maxBatchSize: maxBatch);
+
+        PreallocatedMoeExpansionBank? sleepBank = null;
+        SleepConsolidationTrainer? sleepTrainer = null;
+        AutonomousSleepDaemon? sleepDaemon = null;
+        if (opts.SleepIdleSeconds > 0)
+        {
+            const int sleepDim = 64;
+            sleepBank = new PreallocatedMoeExpansionBank(dimension: sleepDim, rank: 8, maxExperts: 8);
+            sleepTrainer = new SleepConsolidationTrainer(sleepBank);
+            sleepDaemon = new AutonomousSleepDaemon(
+                sleepTrainer,
+                new SleepDaemonOptions(
+                    IdleThreshold: TimeSpan.FromSeconds(opts.SleepIdleSeconds),
+                    PollingInterval: TimeSpan.FromSeconds(1),
+                    MinDreamsToTriggerSleep: Math.Max(1, opts.SleepMinDreams)));
+            engine.AttachSleepDaemon(sleepDaemon, sleepDim);
+            sleepDaemon.Start();
+            Console.WriteLine($"  ✓ Sleep Memory:       Enabled (idle={opts.SleepIdleSeconds}s, minDreams={Math.Max(1, opts.SleepMinDreams)})\n");
+        }
+
+        using var _sleepBankCleanup = sleepBank;
+        using var _sleepTrainerCleanup = sleepTrainer;
+        using var _sleepDaemonCleanup = sleepDaemon;
         using var app = GlacierServeApp.CreateBuilder()
             .UseHost(host)
             .UsePort(port)
@@ -169,5 +213,7 @@ public static class ServeCommandHandler
         Console.WriteLine("  --blocks <int>                       PagedAttention KV blocks (default: 1024)");
         Console.WriteLine("  -b, --batch-size <int>               Max concurrent sequences (default: 16)");
         Console.WriteLine("  --name <string>                      Model tag alias (default: filename without extension)");
+        Console.WriteLine("  --sleep-idle-seconds <int>           Idle seconds before Sleep consolidation (default: 300, 0=off)");
+        Console.WriteLine("  --sleep-min-dreams <int>             Minimum dreams before auto-sleep triggers (default: 1)");
     }
 }

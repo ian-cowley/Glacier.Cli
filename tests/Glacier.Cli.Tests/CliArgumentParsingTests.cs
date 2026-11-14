@@ -137,4 +137,20 @@ public class CliArgumentParsingTests
             Console.SetOut(origOut);
         }
     }
+
+    [Fact]
+    public void ServeCommandHandler_ParseOptions_ParsesSleepMemoryFlags()
+    {
+        var opts = Glacier.Cli.Commands.ServeCommandHandler.ParseOptions([
+            "model.gguf",
+            "--port", "11435",
+            "--sleep-idle-seconds", "120",
+            "--sleep-min-dreams", "4"
+        ]);
+
+        Assert.Equal("model.gguf", opts.ModelPath);
+        Assert.Equal(11435, opts.Port);
+        Assert.Equal(120, opts.SleepIdleSeconds);
+        Assert.Equal(4, opts.SleepMinDreams);
+    }
 }
