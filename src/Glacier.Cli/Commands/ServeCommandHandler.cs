@@ -157,7 +157,7 @@ public static class ServeCommandHandler
                     IdleThreshold: TimeSpan.FromSeconds(opts.SleepIdleSeconds),
                     PollingInterval: TimeSpan.FromSeconds(1),
                     MinDreamsToTriggerSleep: Math.Max(1, opts.SleepMinDreams)));
-            engine.AttachSleepDaemon(sleepDaemon, sleepDim);
+            engine.AttachSleepDaemon(sleepDaemon, sleepDim, expansionRouter: sleepBank);
             sleepDaemon.Start();
             Console.WriteLine($"  ✓ Sleep Memory:       Enabled (idle={opts.SleepIdleSeconds}s, minDreams={Math.Max(1, opts.SleepMinDreams)})\n");
         }
