@@ -30,6 +30,8 @@ public static class RunCommandHandler
         string? device = null;
         string? engineStr = null;
         string? split = null;
+        string? kvPrecisionStr = null;
+        int maxThinkTokens = ReasoningBudgetPolicy.AutoBudgetSentinel;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -66,6 +68,20 @@ public static class RunCommandHandler
             {
                 split = args[++i];
             }
+            else if (arg is "--kv-precision" && i + 1 < args.Length)
+            {
+                kvPrecisionStr = args[++i];
+            }
+            else if (arg is "--max-think-tokens" && i + 1 < args.Length)
+            {
+                if (!ReasoningBudgetPolicy.TryParseSetting(args[++i], out maxThinkTokens))
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Error: --max-think-tokens must be 'auto', 'off', '0', or a positive integer.");
+                    Console.ResetColor();
+                    return 1;
+                }
+            }
             else if (modelPath == null && !arg.StartsWith("-"))
             {
                 modelPath = arg;
@@ -98,12 +114,21 @@ public static class RunCommandHandler
             engine = parsedEngine;
         }
 
+        KvCachePrecision kvPrecision = KvCachePrecision.Auto;
+        if (!string.IsNullOrEmpty(kvPrecisionStr) && !KvCachePrecisionExtensions.TryParse(kvPrecisionStr, out kvPrecision))
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"Error: Unsupported --kv-precision '{kvPrecisionStr}'. Valid values: auto, fp32, fp16, q8_0, q4_0.");
+            Console.ResetColor();
+            return 1;
+        }
+
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine($"[Glacier.Inference] Initializing session for: {Path.GetFileName(modelPath)}");
         Console.ResetColor();
 
         var loadSw = Stopwatch.StartNew();
-        using var session = new InferenceSession(modelPath, maxSeqLen, device, engine, KvCachePrecision.Auto, split);
+        using var session = new InferenceSession(modelPath, maxSeqLen, device, engine, kvPrecision, split);
         loadSw.Stop();
 
         Console.WriteLine($"  ✓ Architecture: {session.Architecture} ({session.Weights.BlockCount} layers, {session.Weights.VocabSize:N0} vocab)");
@@ -114,7 +139,8 @@ public static class RunCommandHandler
         {
             MaxTokens = maxTokens,
             Temperature = temperature,
-            TopP = topP
+            TopP = topP,
+            MaxReasoningTokens = ReasoningBudgetPolicy.ResolveBudget(maxThinkTokens, maxTokens)
         };
 
         if (!string.IsNullOrEmpty(singlePrompt))

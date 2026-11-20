@@ -12,7 +12,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>glacier</ToolCommandName>
     <PackageId>Glacier.Cli</PackageId>
-    <Version>1.3.0</Version>
+    <Version>1.4.0</Version>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
@@ -32,17 +32,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Glacier.Inference" Version="1.7.0" />
-    <PackageReference Include="Glacier.Tune" Version="1.3.0" />
-    <PackageReference Include="Glacier.Serve" Version="1.6.0" />
-    <PackageReference Include="Glacier.Rag" Version="1.2.0" />
+    <PackageReference Include="Glacier.Inference" Version="1.8.0" />
+    <PackageReference Include="Glacier.Tune" Version="1.4.0" />
+    <PackageReference Include="Glacier.Serve" Version="1.7.0" />
+    <PackageReference Include="Glacier.Rag" Version="1.4.0" />
     <PackageReference Include="Glacier.Graph" Version="1.2.0" />
     <PackageReference Include="Glacier.Vector" Version="1.2.0" />
     <PackageReference Include="Glacier.Tensor" Version="1.1.0" />
     <PackageReference Include="Glacier.Polaris" Version="1.2.0" />
     <PackageReference Include="Glacier.Gpu" Version="1.1.0" />
-    <PackageReference Include="Glacier.Agent" Version="1.3.0" />
-    <PackageReference Include="Glacier.MemEx" Version="1.1.0" />
+    <PackageReference Include="Glacier.Agent" Version="1.4.0" />
+    <PackageReference Include="Glacier.MemEx" Version="1.2.0" />
     <PackageReference Include="Glacier.Clavier" Version="1.2.0" />
   </ItemGroup>
 </Project>
