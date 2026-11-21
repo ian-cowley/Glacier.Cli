@@ -9,6 +9,7 @@ using Glacier.Inference.Config;
 using Glacier.Inference.Engine;
 using Glacier.Inference.Gguf;
 using Glacier.Inference.Hardware;
+using Glacier.Inference.Memory;
 using Glacier.Inference.Model;
 using Glacier.Inference.Sampling;
 
@@ -212,6 +213,65 @@ public static class DiagnosticsCommandHandlers
         return 0;
     }
 
+    public sealed record BenchCliOptions(
+        string? ModelPath,
+        int Tokens = 25,
+        string Prompt = "Explain CPU cache levels L1, L2, and L3 in two sentences.",
+        int MaxSeqLen = 2048,
+        KvCachePrecision KvPrecision = KvCachePrecision.Auto);
+
+    public static BenchCliOptions ParseBenchOptions(string[] args)
+    {
+        string? modelPath = null;
+        int tokens = 25;
+        string prompt = "Explain CPU cache levels L1, L2, and L3 in two sentences.";
+        int maxSeqLen = 2048;
+        KvCachePrecision kvPrecision = KvCachePrecision.Auto;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            string arg = args[i];
+            if (arg is "-m" or "--model")
+            {
+                modelPath = CliOptionHelpers.RequireValue(args, ref i, arg);
+            }
+            else if (arg is "-n" or "--tokens")
+            {
+                string val = CliOptionHelpers.RequireValue(args, ref i, arg);
+                if (!int.TryParse(val, out tokens) || tokens <= 0)
+                    throw new ArgumentException($"Invalid {arg} '{val}'. Expected a positive integer.");
+            }
+            else if (arg is "-p" or "--prompt")
+            {
+                prompt = CliOptionHelpers.RequireValue(args, ref i, arg);
+            }
+            else if (arg is "-c" or "--ctx" or "--context-length")
+            {
+                string val = CliOptionHelpers.RequireValue(args, ref i, arg);
+                if (!int.TryParse(val, out maxSeqLen) || maxSeqLen <= 0)
+                    throw new ArgumentException($"Invalid {arg} '{val}'. Expected a positive integer.");
+            }
+            else if (arg is "--kv-precision")
+            {
+                kvPrecision = CliOptionHelpers.ParseKvPrecision(CliOptionHelpers.RequireValue(args, ref i, arg));
+            }
+            else if (arg.StartsWith("--kv-precision=", StringComparison.Ordinal))
+            {
+                kvPrecision = CliOptionHelpers.ParseKvPrecision(arg["--kv-precision=".Length..]);
+            }
+            else if (modelPath == null && !arg.StartsWith('-'))
+            {
+                modelPath = arg;
+            }
+            else if (arg.StartsWith('-'))
+            {
+                throw new ArgumentException($"Unknown option '{arg}'.");
+            }
+        }
+
+        return new BenchCliOptions(modelPath, tokens, prompt, maxSeqLen, kvPrecision);
+    }
+
     public static async Task<int> RunBenchAsync(string[] args)
     {
         if (args.Length == 0)
@@ -220,16 +280,26 @@ public static class DiagnosticsCommandHandlers
             return 1;
         }
 
-        string modelPath = args[0];
-        int tokens = 25;
-        string prompt = "Explain CPU cache levels L1, L2, and L3 in two sentences.";
-        int maxSeqLen = 2048;
-
-        for (int i = 1; i < args.Length; i++)
+        BenchCliOptions opts;
+        try
         {
-            if (args[i] is "-n" or "--tokens" && i + 1 < args.Length) tokens = int.Parse(args[++i]);
-            else if (args[i] is "-p" or "--prompt" && i + 1 < args.Length) prompt = args[++i];
-            else if (args[i] is "-c" or "--ctx" && i + 1 < args.Length) maxSeqLen = int.Parse(args[++i]);
+            opts = ParseBenchOptions(args);
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            Console.ResetColor();
+            return 1;
+        }
+
+        string? modelPath = opts.ModelPath;
+        if (string.IsNullOrEmpty(modelPath))
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine("Error: Missing model path. Usage: glacier bench <model.gguf> [options]");
+            Console.ResetColor();
+            return 1;
         }
 
         if (!File.Exists(modelPath))
@@ -247,18 +317,19 @@ public static class DiagnosticsCommandHandlers
         Console.ResetColor();
 
         var swLoad = Stopwatch.StartNew();
-        using var session = new InferenceSession(modelPath, maxSeqLen);
+        using var session = new InferenceSession(modelPath, opts.MaxSeqLen, kvPrecision: opts.KvPrecision);
         swLoad.Stop();
 
         Console.WriteLine($"  Model:       {Path.GetFileName(modelPath)}");
         Console.WriteLine($"  Family:      {session.Architecture}");
         Console.WriteLine($"  Engine:      {session.ActiveDevice}");
+        Console.WriteLine($"  KV Precision:{session.KvPrecision.ToDisplayName()}");
         Console.WriteLine($"  Cold Start:  {swLoad.Elapsed.TotalMilliseconds:F1} ms\n");
 
-        Console.WriteLine($"[Benchmarking] Generating {tokens} tokens for prompt: \"{prompt}\"...");
-        var sampling = new SamplingOptions { MaxTokens = tokens, Temperature = 0.0f };
+        Console.WriteLine($"[Benchmarking] Generating {opts.Tokens} tokens for prompt: \"{opts.Prompt}\"...");
+        var sampling = new SamplingOptions { MaxTokens = opts.Tokens, Temperature = 0.0f };
 
-        var result = await session.GenerateAsync(prompt, sampling, formatChat: true);
+        var result = await session.GenerateAsync(opts.Prompt, sampling, formatChat: true);
 
         Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine($"\nResults:");
@@ -297,5 +368,11 @@ public static class DiagnosticsCommandHandlers
     public static void PrintBenchHelp()
     {
         Console.WriteLine("glacier bench <model.gguf> [options] - Run speed and throughput benchmark");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  -n, --tokens <count>                        Tokens to generate (default: 25)");
+        Console.WriteLine("  -p, --prompt <text>                         Custom benchmark prompt");
+        Console.WriteLine("  -c, --ctx, --context-length <len>           Context sequence length (default: 2048)");
+        Console.WriteLine("  --kv-precision <auto|fp32|fp16|fp8|q8_0|q4_0> KV-cache precision (default: auto)");
     }
 }

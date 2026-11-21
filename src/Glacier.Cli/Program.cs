@@ -42,6 +42,7 @@ public static class Program
                 "merge" => MergeCommandHandler.Execute(cmdArgs),
                 "rag" => await RagCommandHandler.ExecuteAsync(cmdArgs),
                 "serve" => await ServeCommandHandler.ExecuteAsync(cmdArgs),
+                "bounce" => await BounceCommandHandler.ExecuteAsync(cmdArgs),
                 "pull" => await PullCommandHandler.ExecuteAsync(cmdArgs),
                 "agent" => await AgentCommandHandler.ExecuteAsync(cmdArgs),
                 "inspect" => DiagnosticsCommandHandlers.RunInspect(cmdArgs),
@@ -93,6 +94,7 @@ public static class Program
         Console.WriteLine("  merge   <base> <adapter> <out>       Fuse LoRA delta adapter directly into base GGUF");
         Console.WriteLine("  rag     --model <gguf> --docs <dir>  In-process SIMD Vector + CSR GraphRAG query");
         Console.WriteLine("  serve   <model.gguf> [options]       Start drop-in Ollama/OpenAI PagedAttention server");
+        Console.WriteLine("  bounce  [options]                    Start Peer Critic + OS-sandboxed compiler bounce proxy");
         Console.WriteLine("  pull    <repo-or-url> [options]      High-speed chunked GGUF download with live progress");
         Console.WriteLine("  agent   <prompt>                     Execute autonomous agent task with Glacier.Agent");
         Console.WriteLine();
@@ -130,6 +132,9 @@ public static class Program
                 break;
             case "serve":
                 ServeCommandHandler.PrintHelp();
+                break;
+            case "bounce":
+                BounceCommandHandler.PrintHelp();
                 break;
             case "pull":
                 PullCommandHandler.PrintHelp();
