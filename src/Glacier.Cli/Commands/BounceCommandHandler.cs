@@ -1,10 +1,12 @@
 namespace Glacier.Cli.Commands;
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Glacier.Inference.Hardware;
 using Glacier.Serve.Inference.Bounce;
 using Glacier.Serve.Inference.Http;
 using Glacier.Serve.Server;
@@ -43,6 +45,9 @@ public static class BounceCommandHandler
                 case "--critic":
                 case "--peer-critic":
                     criticEndpoint = CliOptionHelpers.RequireValue(args, ref i, arg);
+                    break;
+                case "--npu-critic":
+                    criticEndpoint = "auto-npu";
                     break;
                 case "--host":
                     host = CliOptionHelpers.RequireValue(args, ref i, arg);
@@ -98,6 +103,32 @@ public static class BounceCommandHandler
         app.MapPeerBounce(bounceService, mapOpenAiAndHealthRoutes: true, modelAlias: modelAlias);
     }
 
+    /// <summary>
+    /// Resolves <c>--critic</c>, automatically probing local FastFlowLM / Lemonade NPU sidecars
+    /// when <paramref name="criticOption"/> is <c>"auto-npu"</c> or <c>"npu"</c>.
+    /// </summary>
+    public static async Task<(string? Endpoint, NpuSidecarEndpoint? DiscoveredNpu)> ResolveCriticEndpointAsync(
+        string? criticOption,
+        HttpClient httpClient,
+        IReadOnlyList<(string BaseUrl, NpuSidecarRuntime Runtime)>? npuCandidates = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(criticOption))
+            return (null, null);
+
+        if (criticOption.Equals("auto-npu", StringComparison.OrdinalIgnoreCase) ||
+            criticOption.Equals("npu", StringComparison.OrdinalIgnoreCase))
+        {
+            var found = await NpuSidecarDiscovery.ProbeAsync(
+                httpClient,
+                candidates: npuCandidates,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return (found?.BaseUrl, found);
+        }
+
+        return (criticOption, null);
+    }
+
     public static async Task<int> ExecuteAsync(string[] args)
     {
         BounceCliOptions opts;
@@ -120,12 +151,13 @@ public static class BounceCommandHandler
         }
 
         using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(600) };
+        var (resolvedCritic, discoveredNpu) = await ResolveCriticEndpointAsync(opts.CriticEndpoint, httpClient);
         var verifier = new SandboxedProcessBounceVerifier(harnessPath);
         var bounceService = new PeerBounceService(
             httpClient,
             verifier,
             opts.PrimaryEndpoint,
-            opts.CriticEndpoint,
+            resolvedCritic,
             compilerBounceEnabled: opts.CompilerBounceEnabled,
             maxRepairs: opts.MaxRepairs);
 
@@ -136,7 +168,20 @@ public static class BounceCommandHandler
         Console.ResetColor();
         Console.WriteLine($"  ✓ Listen:   http://{opts.Host}:{opts.Port}");
         Console.WriteLine($"  ✓ Primary:  {opts.PrimaryEndpoint}");
-        Console.WriteLine($"  ✓ Critic:   {opts.CriticEndpoint ?? "(disabled)"}");
+        if (discoveredNpu != null)
+        {
+            Console.WriteLine($"  ✓ Critic:   {discoveredNpu.BaseUrl} (NPU Sidecar: {discoveredNpu.Runtime}, model={discoveredNpu.PrimaryModel ?? "auto"})");
+        }
+        else if (opts.CriticEndpoint is not null &&
+                 (opts.CriticEndpoint.Equals("auto-npu", StringComparison.OrdinalIgnoreCase) ||
+                  opts.CriticEndpoint.Equals("npu", StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.WriteLine("  ! Critic:   (no live local NPU sidecar detected on FastFlowLM :52625 or Lemonade :8000/:13305 — critic disabled)");
+        }
+        else
+        {
+            Console.WriteLine($"  ✓ Critic:   {resolvedCritic ?? "(disabled)"}");
+        }
         Console.WriteLine($"  ✓ Verifier: {(opts.CompilerBounceEnabled ? $"ENABLED (maxRepairs={opts.MaxRepairs}, sandbox=OsProcessSandbox)" : "DISABLED")}");
         Console.WriteLine();
 
@@ -177,7 +222,8 @@ public static class BounceCommandHandler
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --primary <url>                      Primary OpenAI/Glacier endpoint (default: http://127.0.0.1:11434)");
-        Console.WriteLine("  --critic, --peer-critic <url>        Optional peer critic endpoint");
+        Console.WriteLine("  --critic, --peer-critic <url|auto-npu> Optional peer critic endpoint (or 'auto-npu' for FastFlowLM/Lemonade NPU)");
+        Console.WriteLine("  --npu-critic                         Shorthand for --critic auto-npu (zero-VRAM NPU critic offload)");
         Console.WriteLine("  --host <string>                      Listening host (default: 127.0.0.1)");
         Console.WriteLine("  -p, --port <int>                     Listening port (default: 18090)");
         Console.WriteLine("  --harness <path>                     Optional EvaluationHarness executable");

@@ -53,10 +53,10 @@ public sealed class M5bCliWiringTests : IDisposable
     [Fact]
     public void PackageAlignment_ResolvesExpectedVersions()
     {
-        Assert.Equal(new Version(1, 8, 0), typeof(SleepMemoryService).Assembly.GetName().Version?.ToString(3) is string sv ? Version.Parse(sv) : null);
-        Assert.Equal(new Version(1, 5, 0), typeof(OsProcessSandbox).Assembly.GetName().Version?.ToString(3) is string av ? Version.Parse(av) : null);
-        Assert.Equal(new Version(1, 2, 0), typeof(MemExEngine).Assembly.GetName().Version?.ToString(3) is string mv ? Version.Parse(mv) : null);
-        Assert.Equal(new Version(1, 8, 0), typeof(InferenceSession).Assembly.GetName().Version?.ToString(3) is string iv ? Version.Parse(iv) : null);
+        Assert.Equal(new Version(1, 8, 4), typeof(SleepMemoryService).Assembly.GetName().Version?.ToString(3) is string sv ? Version.Parse(sv) : null);
+        Assert.Equal(new Version(1, 5, 2), typeof(OsProcessSandbox).Assembly.GetName().Version?.ToString(3) is string av ? Version.Parse(av) : null);
+        Assert.Equal(new Version(1, 2, 2), typeof(MemExEngine).Assembly.GetName().Version?.ToString(3) is string mv ? Version.Parse(mv) : null);
+        Assert.Equal(new Version(1, 8, 2), typeof(InferenceSession).Assembly.GetName().Version?.ToString(3) is string iv ? Version.Parse(iv) : null);
     }
 
     [Fact]

@@ -35,6 +35,10 @@ public static class DiagnosticsCommandHandlers
             {
                 memStr = $"{dev.SharedVramGb:F1} GB RAM";
             }
+            else if (dev.IsNpu)
+            {
+                memStr = $"{dev.SharedVramGb:F1} GB NPU Cap";
+            }
             else if (dev.DedicatedVramGb < 1.0 && dev.SharedVramGb > 0)
             {
                 memStr = $"{dev.SharedVramGb:F1} GB Unified";
@@ -53,6 +57,14 @@ public static class DiagnosticsCommandHandlers
 
             Console.ForegroundColor = ConsoleColor.DarkGray;
             Console.WriteLine($"  └─ Driver Safety: {dev.SafetyNotes}");
+            Console.ResetColor();
+        }
+
+        if (devices.Any(d => d.IsNpu))
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("* NPU Sidecar detected: run 'flm serve <model>' (FastFlowLM) or 'lemonade-server' and offload critic/RAG:");
+            Console.WriteLine("  glacier bounce --primary http://127.0.0.1:11434 --critic auto-npu");
             Console.ResetColor();
         }
 
@@ -347,6 +359,7 @@ public static class DiagnosticsCommandHandlers
         InferenceEngineType.Vulkan => "Vulkan (CoopMat / WMMA)",
         InferenceEngineType.DirectML => "DirectML",
         InferenceEngineType.Cpu => "Cpu",
+        InferenceEngineType.NpuSidecar => "NPU Sidecar (FLM / Lemonade)",
         _ => engine.ToString()
     };
 

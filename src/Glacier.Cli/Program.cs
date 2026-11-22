@@ -92,11 +92,11 @@ public static class Program
         Console.WriteLine("  run     <model.gguf> [prompt]        Execute streaming inference or interactive REPL");
         Console.WriteLine("  tune    <base.gguf> --data <data>    Fine-tune model in minutes with in-process LoRA");
         Console.WriteLine("  merge   <base> <adapter> <out>       Fuse LoRA delta adapter directly into base GGUF");
-        Console.WriteLine("  rag     --model <gguf> --docs <dir>  In-process SIMD Vector + CSR GraphRAG query");
+        Console.WriteLine("  rag     --docs <dir> [options]       In-process SIMD Vector + CSR GraphRAG (CPU/NPU)");
         Console.WriteLine("  serve   <model.gguf> [options]       Start drop-in Ollama/OpenAI PagedAttention server");
         Console.WriteLine("  bounce  [options]                    Start Peer Critic + OS-sandboxed compiler bounce proxy");
         Console.WriteLine("  pull    <repo-or-url> [options]      High-speed chunked GGUF download with live progress");
-        Console.WriteLine("  agent   <prompt>                     Execute autonomous agent task with Glacier.Agent");
+        Console.WriteLine("  agent   [options] <prompt>           Execute autonomous agent task (GGUF or --npu)");
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.Yellow;
         Console.WriteLine("Diagnostics & Benchmarks:");

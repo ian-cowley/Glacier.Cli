@@ -20,7 +20,7 @@ public class CliIntegrationTests
     {
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -62,7 +62,7 @@ public class CliIntegrationTests
     {
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -82,7 +82,7 @@ public class CliIntegrationTests
     {
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -101,7 +101,7 @@ public class CliIntegrationTests
     {
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -119,7 +119,7 @@ public class CliIntegrationTests
     {
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -137,7 +137,7 @@ public class CliIntegrationTests
     {
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -155,7 +155,7 @@ public class CliIntegrationTests
     {
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -207,7 +207,7 @@ public class CliIntegrationTests
 
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -243,7 +243,7 @@ public class CliIntegrationTests
 
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -283,7 +283,7 @@ public class CliIntegrationTests
     {
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -306,7 +306,7 @@ public class CliIntegrationTests
 
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
@@ -345,7 +345,7 @@ public class CliIntegrationTests
     {
         var sw = new StringWriter();
         var origOut = Console.Out;
-        Console.SetOut(sw);
+        Console.SetOut(TextWriter.Synchronized(sw));
 
         try
         {
