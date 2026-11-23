@@ -56,6 +56,8 @@ public static class Program
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.Error.WriteLine($"\n[Glacier Error] {ex.Message}");
+            if (Environment.GetEnvironmentVariable("GLACIER_DEBUG") == "1")
+                Console.Error.WriteLine(ex.ToString());
             Console.ResetColor();
             return 1;
         }
