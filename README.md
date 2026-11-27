@@ -107,9 +107,15 @@ glacier agent "CALL devices: {}"
 - **Supported Architectures**: Meta Llama 3/3.1/3.2/3.3, Microsoft Phi-4/Phi-3, DeepSeek-V2/V3/R1, Mistral/Devstral, Alibaba Qwen 2/2.5.
 - **Quantization Types**: `Q4_K_M`, `Q5_K_M`, `Q6_K`, `Q8_0`, `Q4_0`, `MXFP4`, `F16`, `F32`.
 
+| **`glacier inspect`** | Inspect GGUF metadata & tensor layouts | Zero-copy header inspection |
+| **`glacier security-check`** | Scan directories/files for exposed secrets | Native AOT C# scanner (`.github/`, UTF-16, conn strings, `0x` keys) |
+
 ---
 
-## 🆕 What's New in v1.1.0
+## 🆕 What's New in v1.5.0
+
+- **Native C# `glacier security-check` CLI Command** (`SecurityCheckCommandHandler`) — Zero-dependency Native AOT secret scanner with `[GeneratedRegex]` detectors (Google/OpenAI/Anthropic/GitHub/AWS/HF/Slack keys, connection-string passwords, `0x` hex private keys), `.github/` workflow scanning, UTF-16 BOM/NUL decoding, and streaming large-file scans.
+- **Ecosystem Package Alignment (`v1.5.0`)** — Aligned dependencies across `Glacier.Serve v1.9.0`, `Glacier.Tune v1.7.0`, `Glacier.Agent v1.5.3`, `Glacier.MemEx v1.2.3`, `Glacier.Inference v1.10.1`, `Glacier.Polaris v1.2.6`, `Glacier.Rag v1.4.3`, `Glacier.Tensor v1.1.2`, `Glacier.Vector v1.3.1`, `Glacier.Graph v1.2.1`, `Glacier.Clavier v1.2.1`, and `Glacier.Gpu v1.2.1`.
 
 - **Hardened `glacier pull` Downloader** — added `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN` Bearer authentication, strict path-traversal containment, `.part` HTTP `Range` resume on `206 Partial Content`, redirected-console cursor safety, and fail-closed `GGUF` magic verification.
 - **Persistent `glacier rag` Session Reuse** — hoisted `InferenceSession` outside the interactive REPL loop so model weights and KV caches remain warm across queries.

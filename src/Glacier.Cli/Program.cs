@@ -49,6 +49,7 @@ public static class Program
                 "devices" => DiagnosticsCommandHandlers.RunDevices(cmdArgs),
                 "bench" => await DiagnosticsCommandHandlers.RunBenchAsync(cmdArgs),
                 "config" => DiagnosticsCommandHandlers.RunConfig(cmdArgs),
+                "security-check" => SecurityCheckCommandHandler.Execute(cmdArgs),
                 _ => HandleUnknownCommand(command)
             };
         }
@@ -107,6 +108,7 @@ public static class Program
         Console.WriteLine("  inspect <model.gguf>                 Display GGUF architecture, metadata & tensors");
         Console.WriteLine("  bench   <model.gguf> [options]       Measure cold start, prefill tok/s & decode tok/s");
         Console.WriteLine("  config  [options]                    Manage persistent acceleration preferences");
+        Console.WriteLine("  security-check [path]                Scan repository for exposed credentials and secrets");
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine("Run 'glacier <command> --help' or 'glacier help <command>' for command-specific options.");
@@ -152,6 +154,9 @@ public static class Program
                 break;
             case "config":
                 DiagnosticsCommandHandlers.PrintConfigHelp();
+                break;
+            case "security-check":
+                SecurityCheckCommandHandler.PrintHelp();
                 break;
             default:
                 Console.ForegroundColor = ConsoleColor.Yellow;
