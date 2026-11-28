@@ -46,6 +46,7 @@ public static class Program
                 "pull" => await PullCommandHandler.ExecuteAsync(cmdArgs),
                 "agent" => await AgentCommandHandler.ExecuteAsync(cmdArgs),
                 "inspect" => DiagnosticsCommandHandlers.RunInspect(cmdArgs),
+                "audit-adapter" => AdapterAuditCommandHandler.Execute(cmdArgs),
                 "devices" => DiagnosticsCommandHandlers.RunDevices(cmdArgs),
                 "bench" => await DiagnosticsCommandHandlers.RunBenchAsync(cmdArgs),
                 "config" => DiagnosticsCommandHandlers.RunConfig(cmdArgs),
@@ -105,7 +106,8 @@ public static class Program
         Console.WriteLine("Diagnostics & Benchmarks:");
         Console.ResetColor();
         Console.WriteLine("  devices                              Detect and audit GPUs, VRAM, and SIMD hardware");
-        Console.WriteLine("  inspect <model.gguf>                 Display GGUF architecture, metadata & tensors");
+        Console.WriteLine("  inspect <model.gguf> [options]       Display GGUF architecture, metadata, or --audit integrity");
+        Console.WriteLine("  audit-adapter <adapter.bin> [opts]   Audit LoRA adapter weights, norms, and EOF integrity");
         Console.WriteLine("  bench   <model.gguf> [options]       Measure cold start, prefill tok/s & decode tok/s");
         Console.WriteLine("  config  [options]                    Manage persistent acceleration preferences");
         Console.WriteLine("  security-check [path] [options]      Scan repository for exposed credentials and secrets");
@@ -148,6 +150,9 @@ public static class Program
                 break;
             case "inspect":
                 DiagnosticsCommandHandlers.PrintInspectHelp();
+                break;
+            case "audit-adapter":
+                AdapterAuditCommandHandler.PrintHelp();
                 break;
             case "bench":
                 DiagnosticsCommandHandlers.PrintBenchHelp();

@@ -161,14 +161,85 @@ public static class DiagnosticsCommandHandlers
             return 1;
         }
 
-        string modelPath = args[0];
+        string? modelPath = null;
         string? filter = null;
         bool showAll = false;
+        bool auditMode = false;
+        bool jsonOutput = false;
+        long? maxBytes = null;
+        var forbiddenTypes = new List<string>();
+        var probeTensors = new List<string>();
 
-        for (int i = 1; i < args.Length; i++)
+        try
         {
-            if (args[i] is "-f" or "--filter" && i + 1 < args.Length) filter = args[++i];
-            else if (args[i] is "-a" or "--all") showAll = true;
+            for (int i = 0; i < args.Length; i++)
+            {
+                string arg = args[i];
+                if (arg is "-f" or "--filter")
+                {
+                    filter = CliOptionHelpers.RequireValue(args, ref i, arg);
+                }
+                else if (arg is "-a" or "--all")
+                {
+                    showAll = true;
+                }
+                else if (arg == "--audit")
+                {
+                    auditMode = true;
+                }
+                else if (arg == "--json")
+                {
+                    auditMode = true;
+                    jsonOutput = true;
+                }
+                else if (arg == "--assert-no-type")
+                {
+                    auditMode = true;
+                    forbiddenTypes.Add(CliOptionHelpers.RequireValue(args, ref i, arg));
+                }
+                else if (arg == "--max-bytes")
+                {
+                    auditMode = true;
+                    string val = CliOptionHelpers.RequireValue(args, ref i, arg);
+                    if (!long.TryParse(val, out long parsed) || parsed <= 0)
+                        throw new ArgumentException($"Invalid {arg} '{val}'. Expected positive byte limit.");
+                    maxBytes = parsed;
+                }
+                else if (arg == "--probe")
+                {
+                    auditMode = true;
+                    probeTensors.Add(CliOptionHelpers.RequireValue(args, ref i, arg));
+                }
+                else if (modelPath == null && !arg.StartsWith('-'))
+                {
+                    modelPath = arg;
+                }
+                else
+                {
+                    throw new ArgumentException($"Unknown option or unexpected argument '{arg}'.");
+                }
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            Console.ResetColor();
+            return 1;
+        }
+
+        if (string.IsNullOrWhiteSpace(modelPath))
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine("Error: Missing model path. Usage: glacier inspect <model.gguf> [options]");
+            Console.ResetColor();
+            return 1;
+        }
+
+        if (auditMode)
+        {
+            var auditOptions = new GgufAuditOptions(forbiddenTypes, maxBytes, probeTensors, jsonOutput);
+            return GgufAuditCommandHandler.ExecuteAudit(modelPath, auditOptions);
         }
 
         if (!File.Exists(modelPath))
@@ -375,7 +446,16 @@ public static class DiagnosticsCommandHandlers
 
     public static void PrintInspectHelp()
     {
-        Console.WriteLine("glacier inspect <model.gguf> [options] - Inspect GGUF structure and metadata");
+        Console.WriteLine("glacier inspect <model.gguf> [options] - Inspect GGUF structure, metadata & integrity");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  -f, --filter <substr>        Filter tensor listing by substring");
+        Console.WriteLine("  -a, --all                    Print all tensors instead of first 20");
+        Console.WriteLine("  --audit                      Run deep alignment, overlap, bounds & dequantization NaN/Inf audit");
+        Console.WriteLine("  --assert-no-type <type>      Fail audit if any tensor has this type (e.g. Q8_0); repeatable");
+        Console.WriteLine("  --max-bytes <bytes>          Fail audit if file size exceeds ceiling");
+        Console.WriteLine("  --probe <tensor>             Spot-check physical dequantization of named tensor; repeatable");
+        Console.WriteLine("  --json                       Emit structured JSON audit summary");
     }
 
     public static void PrintBenchHelp()

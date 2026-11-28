@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(_RootPackagesPropsLoaded)' != 'true'">
-    <PackageVersion Include="Glacier.Agent" Version="1.5.3" />
+    <PackageVersion Include="Glacier.Agent" Version="1.5.4" />
     <PackageVersion Include="Glacier.Clavier" Version="1.2.1" />
     <PackageVersion Include="Glacier.Gpu" Version="1.2.1" />
     <PackageVersion Include="Glacier.Graph" Version="1.2.1" />
