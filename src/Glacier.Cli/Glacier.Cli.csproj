@@ -12,7 +12,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>glacier</ToolCommandName>
     <PackageId>Glacier.Cli</PackageId>
-    <Version>1.5.0</Version>
+    <Version>1.5.1</Version>
     <PackageReleaseNotes>v1.5.0: Native AOT glacier security-check command and full Tier 0-3 package alignment.</PackageReleaseNotes>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <IsAotCompatible>true</IsAotCompatible>
