@@ -13,7 +13,8 @@ public sealed record EcosystemViolation(string Rule, string RepoName, string Fil
 /// <summary>Options controlling cross-repo ecosystem verification.</summary>
 public sealed record VerifyEcosystemOptions(
     bool CheckSecrets = false,
-    bool IncludePredict = false);
+    bool IncludePredict = false,
+    bool StandaloneOnly = false);
 
 /// <summary>Summary of an ecosystem verification pass across one or more repositories.</summary>
 public sealed record VerifyEcosystemResult(
@@ -82,6 +83,7 @@ public static class VerifyEcosystemCommandHandler
         w.WriteLine();
         w.WriteLine("Options:");
         w.WriteLine("  --root <dir>        Root workspace or repository directory (default: '.')");
+        w.WriteLine("  --standalone-only   Audit only standalone Glacier.* repos (exclude scratch/tests/E2E/Video)");
         w.WriteLine("  --check-secrets     Also run secret hygiene audit across scanned repos");
         w.WriteLine("  --include-predict   Include Glacier.Predict and Glacier.Predict.Equity");
         w.WriteLine("  --json              Emit machine-readable JSON output");
@@ -98,6 +100,7 @@ public static class VerifyEcosystemCommandHandler
         bool rootSpecified = false;
         bool checkSecrets = false;
         bool includePredict = false;
+        bool standaloneOnly = false;
         bool jsonOutput = false;
 
         try
@@ -114,6 +117,9 @@ public static class VerifyEcosystemCommandHandler
                     case "--root":
                         rootPath = CliOptionHelpers.RequireValue(args, ref i, "--root");
                         rootSpecified = true;
+                        break;
+                    case "--standalone-only":
+                        standaloneOnly = true;
                         break;
                     case "--check-secrets":
                         checkSecrets = true;
@@ -150,7 +156,10 @@ public static class VerifyEcosystemCommandHandler
 
         VerifyEcosystemResult result = VerifyWorkspace(
             fullRoot,
-            new VerifyEcosystemOptions(CheckSecrets: checkSecrets, IncludePredict: includePredict));
+            new VerifyEcosystemOptions(
+                CheckSecrets: checkSecrets,
+                IncludePredict: includePredict,
+                StandaloneOnly: standaloneOnly));
 
         if (jsonOutput)
         {
@@ -187,14 +196,14 @@ public static class VerifyEcosystemCommandHandler
         if (!Directory.Exists(fullRoot))
             throw new DirectoryNotFoundException($"Directory not found: {fullRoot}");
 
-        List<(string Name, string Dir)> repos = DiscoverRepositories(fullRoot, options.IncludePredict);
+        List<(string Name, string Dir)> repos = DiscoverRepositories(fullRoot, options.IncludePredict, options.StandaloneOnly);
         var violations = new List<EcosystemViolation>();
         int projectFilesScanned = 0;
         int secretFilesScanned = 0;
 
         foreach ((string repoName, string repoDir) in repos)
         {
-            List<string> msbuildFiles = EnumerateMsBuildFiles(repoDir);
+            List<string> msbuildFiles = EnumerateMsBuildFiles(repoDir, options.StandaloneOnly);
             foreach (string msbuildFile in msbuildFiles)
             {
                 projectFilesScanned++;
@@ -254,7 +263,7 @@ public static class VerifyEcosystemCommandHandler
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    private static List<(string Name, string Dir)> DiscoverRepositories(string fullRoot, bool includePredict)
+    private static List<(string Name, string Dir)> DiscoverRepositories(string fullRoot, bool includePredict, bool standaloneOnly)
     {
         var repos = new List<(string Name, string Dir)>();
         var childDirs = Directory.GetDirectories(fullRoot);
@@ -269,11 +278,14 @@ public static class VerifyEcosystemCommandHandler
             if (!includePredict && ExcludedPredictRepos.Contains(dirName))
                 continue;
 
+            if (standaloneOnly && !IsStandaloneGlacierRepoDir(dirName))
+                continue;
+
             if (LooksLikeRepository(childDir, dirName))
                 repos.Add((dirName, EnsureTrimmedFullPath(childDir)));
         }
 
-        if (repos.Count == 0 && EnumerateMsBuildFiles(fullRoot).Count > 0)
+        if (repos.Count == 0 && EnumerateMsBuildFiles(fullRoot, standaloneOnly).Count > 0)
         {
             string repoName = Path.GetFileName(fullRoot);
             if (includePredict || !ExcludedPredictRepos.Contains(repoName))
@@ -282,6 +294,11 @@ public static class VerifyEcosystemCommandHandler
 
         return repos;
     }
+
+    private static bool IsStandaloneGlacierRepoDir(string dirName) =>
+        dirName.StartsWith("Glacier.", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(dirName, "Glacier.E2E.Tests", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(dirName, "Glacier.Video", StringComparison.OrdinalIgnoreCase);
 
     private static bool LooksLikeRepository(string dirPath, string dirName)
     {
@@ -304,7 +321,7 @@ public static class VerifyEcosystemCommandHandler
         return EnumerateMsBuildFiles(dirPath).Count > 0;
     }
 
-    private static List<string> EnumerateMsBuildFiles(string rootDir)
+    private static List<string> EnumerateMsBuildFiles(string rootDir, bool standaloneOnly = false)
     {
         var files = new List<string>();
         var stack = new Stack<string>();
@@ -336,6 +353,13 @@ public static class VerifyEcosystemCommandHandler
                 {
                     if (ExcludedTreeDirs.Contains(name))
                         continue;
+                    if (standaloneOnly &&
+                        (name.StartsWith("scratch", StringComparison.OrdinalIgnoreCase) ||
+                         name.StartsWith("TestApp", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(name, "eval_sandbox", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
                     if (name.StartsWith('.') && !string.Equals(name, ".github", StringComparison.OrdinalIgnoreCase))
                         continue;
                     stack.Push(entry);
@@ -383,11 +407,37 @@ public static class VerifyEcosystemCommandHandler
             msbuildFile.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase);
 
         var packageRefs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var localGuardProps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var defineConstantsElements = new List<XElement>();
 
         foreach (XElement element in doc.Descendants())
         {
             string localName = element.Name.LocalName;
-            if (string.Equals(localName, "PackageReference", StringComparison.OrdinalIgnoreCase) ||
+            if (string.Equals(localName, "PropertyGroup", StringComparison.OrdinalIgnoreCase))
+            {
+                string pgCond = element.Attribute("Condition")?.Value ?? string.Empty;
+                foreach (XElement prop in element.Elements())
+                {
+                    if (string.Equals(prop.Name.LocalName, "DefineConstants", StringComparison.OrdinalIgnoreCase))
+                    {
+                        defineConstantsElements.Add(prop);
+                    }
+
+                    if (!string.Equals(prop.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    string ownCond = prop.Attribute("Condition")?.Value ?? string.Empty;
+                    string combinedCond = string.IsNullOrWhiteSpace(pgCond)
+                        ? ownCond
+                        : (string.IsNullOrWhiteSpace(ownCond) ? pgCond : $"{pgCond} && {ownCond}");
+
+                    if (HasDirectLocalGateCondition(combinedCond))
+                    {
+                        localGuardProps[prop.Name.LocalName] = combinedCond;
+                    }
+                }
+            }
+            else if (string.Equals(localName, "PackageReference", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(localName, "PackageVersion", StringComparison.OrdinalIgnoreCase))
             {
                 string? pkgId = (element.Attribute("Include")?.Value ?? element.Attribute("Update")?.Value)?.Trim();
@@ -448,10 +498,7 @@ public static class VerifyEcosystemCommandHandler
                 continue;
 
             string effectiveCondition = CollectEffectiveCondition(projRef);
-            bool hasValidGate =
-                effectiveCondition.Contains("UseLocalProjectReferences", StringComparison.OrdinalIgnoreCase) ||
-                effectiveCondition.Contains("Exists(", StringComparison.OrdinalIgnoreCase) ||
-                effectiveCondition.Contains("Release", StringComparison.OrdinalIgnoreCase);
+            bool hasValidGate = HasEffectiveLocalGate(effectiveCondition, localGuardProps);
 
             if (!hasValidGate)
             {
@@ -463,7 +510,9 @@ public static class VerifyEcosystemCommandHandler
             }
 
             string targetPackageId = Path.GetFileNameWithoutExtension(targetFullPath);
-            if (!string.IsNullOrEmpty(targetPackageId) && !packageRefs.Contains(targetPackageId))
+            if (!string.IsNullOrEmpty(targetPackageId) &&
+                !packageRefs.Contains(targetPackageId) &&
+                !HasOptionalLocalDefine(defineConstantsElements, targetPackageId, localGuardProps))
             {
                 violations.Add(new EcosystemViolation(
                     Rule: "MISSING_NUGET_FALLBACK",
@@ -472,6 +521,60 @@ public static class VerifyEcosystemCommandHandler
                     Message: $"Cross-repo ProjectReference '{rawInclude}' has no matching <PackageReference Include=\"{targetPackageId}\" /> NuGet fallback."));
             }
         }
+    }
+
+    private static bool HasDirectLocalGateCondition(string condition) =>
+        condition.Contains("UseLocalProjectReferences", StringComparison.OrdinalIgnoreCase) ||
+        condition.Contains("Exists(", StringComparison.OrdinalIgnoreCase) ||
+        condition.Contains("Release", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasEffectiveLocalGate(string effectiveCondition, Dictionary<string, string> localGuardProps)
+    {
+        if (HasDirectLocalGateCondition(effectiveCondition))
+            return true;
+
+        foreach (string propName in localGuardProps.Keys)
+        {
+            if (effectiveCondition.Contains($"'$({propName})' == 'true'", StringComparison.OrdinalIgnoreCase) ||
+                effectiveCondition.Contains($"$({propName}) == true", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasOptionalLocalDefine(
+        List<XElement> defineConstantsElements,
+        string targetPackageId,
+        Dictionary<string, string> localGuardProps)
+    {
+        string upperPkg = targetPackageId.Replace('.', '_').Replace('-', '_').ToUpperInvariant();
+        string shortStem = upperPkg.StartsWith("GLACIER_", StringComparison.Ordinal)
+            ? upperPkg["GLACIER_".Length..]
+            : upperPkg;
+        string expectedShortDefine = $"USE_LOCAL_{shortStem}";
+        string expectedFullDefine = $"USE_LOCAL_{upperPkg}";
+
+        foreach (XElement dc in defineConstantsElements)
+        {
+            string dcCond = CollectEffectiveCondition(dc);
+            if (!HasEffectiveLocalGate(dcCond, localGuardProps))
+                continue;
+
+            string[] tokens = dc.Value.Split([';', ' ', '\t', '\r', '\n', ','], StringSplitOptions.RemoveEmptyEntries);
+            foreach (string token in tokens)
+            {
+                if (string.Equals(token, expectedShortDefine, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(token, expectedFullDefine, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static string CollectEffectiveCondition(XElement element)

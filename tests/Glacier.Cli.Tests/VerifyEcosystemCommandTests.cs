@@ -167,4 +167,94 @@ public class VerifyEcosystemCommandTests
                 Directory.Delete(tempRoot, recursive: true);
         }
     }
+
+    [Fact]
+    public void VerifyEcosystem_SupportsIndirectGuardProperty_OptionalDefine_AndStandaloneOnly()
+    {
+        string tempRoot = Path.Combine(Path.GetTempPath(), $"glacier_eco_guards_{Guid.NewGuid():N}");
+        try
+        {
+            string repoAlpha = Path.Combine(tempRoot, "Glacier.Alpha");
+            string repoStorage = Path.Combine(tempRoot, "Glacier.Storage");
+            string repoLittle = Path.Combine(tempRoot, "Glacier.LittleBit");
+            string repoChrono = Path.Combine(tempRoot, "Glacier.Chrono");
+            string scratchProject = Path.Combine(tempRoot, "scratch");
+            Directory.CreateDirectory(repoAlpha);
+            Directory.CreateDirectory(repoStorage);
+            Directory.CreateDirectory(repoLittle);
+            Directory.CreateDirectory(repoChrono);
+            Directory.CreateDirectory(scratchProject);
+
+            const string minimalCsproj = """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                  </PropertyGroup>
+                </Project>
+                """;
+            File.WriteAllText(Path.Combine(repoAlpha, "Glacier.Alpha.csproj"), minimalCsproj);
+            File.WriteAllText(Path.Combine(repoStorage, "Glacier.Storage.csproj"), minimalCsproj);
+
+            // Indirect PropertyGroup guard (_UseLocalAlpha)
+            File.WriteAllText(
+                Path.Combine(repoLittle, "Glacier.LittleBit.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                    <_UseLocalAlpha Condition="Exists('..\Glacier.Alpha\Glacier.Alpha.csproj') and '$(UseLocalProjectReferences)' != 'false'">true</_UseLocalAlpha>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="..\Glacier.Alpha\Glacier.Alpha.csproj" Condition="'$(_UseLocalAlpha)' == 'true'" />
+                    <PackageReference Include="Glacier.Alpha" Version="1.0.0" Condition="'$(_UseLocalAlpha)' != 'true'" />
+                  </ItemGroup>
+                </Project>
+                """);
+
+            // Optional #if USE_LOCAL_STORAGE local-only ProjectReference
+            File.WriteAllText(
+                Path.Combine(repoChrono, "Glacier.Chrono.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                  </PropertyGroup>
+                  <PropertyGroup Condition="'$(UseLocalProjectReferences)' != 'false' and Exists('..\Glacier.Storage\Glacier.Storage.csproj')">
+                    <DefineConstants>$(DefineConstants);USE_LOCAL_STORAGE</DefineConstants>
+                  </PropertyGroup>
+                  <ItemGroup Condition="'$(UseLocalProjectReferences)' != 'false' and Exists('..\Glacier.Storage\Glacier.Storage.csproj')">
+                    <ProjectReference Include="..\Glacier.Storage\Glacier.Storage.csproj" />
+                  </ItemGroup>
+                </Project>
+                """);
+
+            // Non-standalone scratch project with unconditioned reference should be ignored under StandaloneOnly
+            File.WriteAllText(
+                Path.Combine(scratchProject, "Scratch.csproj"),
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <ItemGroup>
+                    <ProjectReference Include="..\Glacier.Alpha\Glacier.Alpha.csproj" />
+                  </ItemGroup>
+                </Project>
+                """);
+
+            VerifyEcosystemResult fullResult = VerifyEcosystemCommandHandler.VerifyWorkspace(
+                tempRoot,
+                new VerifyEcosystemOptions(StandaloneOnly: false));
+            Assert.False(fullResult.Passed);
+            Assert.Contains(fullResult.Violations, v => v.RepoName == "scratch");
+
+            VerifyEcosystemResult standaloneResult = VerifyEcosystemCommandHandler.VerifyWorkspace(
+                tempRoot,
+                new VerifyEcosystemOptions(StandaloneOnly: true));
+            Assert.True(standaloneResult.Passed, string.Join("; ", standaloneResult.Violations));
+            Assert.Equal(4, standaloneResult.ReposScanned);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
 }

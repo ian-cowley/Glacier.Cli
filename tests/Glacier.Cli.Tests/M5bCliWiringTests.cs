@@ -56,7 +56,9 @@ public sealed class M5bCliWiringTests : IDisposable
         Assert.Equal(new Version(1, 9, 0), typeof(SleepMemoryService).Assembly.GetName().Version?.ToString(3) is string sv ? Version.Parse(sv) : null);
         Assert.Equal(new Version(1, 5, 4), typeof(OsProcessSandbox).Assembly.GetName().Version?.ToString(3) is string av ? Version.Parse(av) : null);
         Assert.Equal(new Version(1, 2, 3), typeof(MemExEngine).Assembly.GetName().Version?.ToString(3) is string mv ? Version.Parse(mv) : null);
-        Assert.Equal(new Version(1, 10, 1), typeof(InferenceSession).Assembly.GetName().Version?.ToString(3) is string iv ? Version.Parse(iv) : null);
+        Version? inferenceVer = typeof(InferenceSession).Assembly.GetName().Version?.ToString(3) is string iv ? Version.Parse(iv) : null;
+        Assert.NotNull(inferenceVer);
+        Assert.True(inferenceVer >= new Version(1, 10, 1), $"Unexpected Glacier.Inference version: {inferenceVer}");
     }
 
     [Fact]

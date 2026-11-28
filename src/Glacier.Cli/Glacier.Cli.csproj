@@ -12,8 +12,8 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>glacier</ToolCommandName>
     <PackageId>Glacier.Cli</PackageId>
-    <Version>1.6.2</Version>
-    <PackageReleaseNotes>v1.6.2: Opt-in --clavier-model checkpoint routing in agent, parallel ArrayPool/Range + SHA-256 verification in pull, hardened tune/merge CLI validation, and Ctrl+C cancellation.</PackageReleaseNotes>
+    <Version>1.6.3</Version>
+    <PackageReleaseNotes>v1.6.3: Support MSBuild indirect guard properties and optional USE_LOCAL_* defines in verify-ecosystem, plus --standalone-only filtering.</PackageReleaseNotes>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
