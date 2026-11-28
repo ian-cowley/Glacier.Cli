@@ -1,12 +1,48 @@
 namespace Glacier.Cli.Commands;
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using Glacier.Tune.Export;
 
+public sealed record MergeCliOptions(string BaseGguf, string AdapterBin, string OutputGguf, int Threads);
+
 public static class MergeCommandHandler
 {
+    public static MergeCliOptions ParseOptions(string[] args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+
+        var positionals = new List<string>(3);
+        int threads = Environment.ProcessorCount;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            string arg = args[i];
+            if (arg is "-t" or "--threads")
+            {
+                string raw = CliOptionHelpers.RequireValue(args, ref i, arg);
+                if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out threads) || threads <= 0)
+                    throw new ArgumentException($"Invalid {arg} '{raw}'. Expected a positive integer.");
+            }
+            else if (arg.StartsWith('-'))
+            {
+                throw new ArgumentException($"Unknown option '{arg}'.");
+            }
+            else
+            {
+                positionals.Add(arg);
+            }
+        }
+
+        if (positionals.Count != 3)
+            throw new ArgumentException("Usage: glacier merge <base.gguf> <adapter.bin> <output.gguf> [options]");
+
+        return new MergeCliOptions(positionals[0], positionals[1], positionals[2], threads);
+    }
+
     public static int Execute(string[] args)
     {
         if (args.Length < 3)
@@ -15,18 +51,23 @@ public static class MergeCommandHandler
             return 1;
         }
 
-        string baseGguf = args[0];
-        string adapterBin = args[1];
-        string outGguf = args[2];
-        int threads = Environment.ProcessorCount;
-
-        for (int i = 3; i < args.Length; i++)
+        MergeCliOptions opts;
+        try
         {
-            if (args[i] is "-t" or "--threads" && i + 1 < args.Length)
-            {
-                threads = int.Parse(args[++i]);
-            }
+            opts = ParseOptions(args);
         }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            Console.ResetColor();
+            return 1;
+        }
+
+        string baseGguf = opts.BaseGguf;
+        string adapterBin = opts.AdapterBin;
+        string outGguf = opts.OutputGguf;
+        int threads = opts.Threads;
 
         if (!File.Exists(baseGguf))
         {

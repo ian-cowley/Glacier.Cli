@@ -2,6 +2,7 @@ namespace Glacier.Cli.Commands;
 
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using Glacier.Tune.Config;
@@ -10,15 +11,27 @@ using Glacier.Tune.Export;
 using Glacier.Tune.Model;
 using Glacier.Tune.Trainer;
 
+public sealed record TuneCliOptions(
+    string? BaseGgufPath = null,
+    string? DataJsonlPath = null,
+    string OutAdapterPath = "adapters/lora_adapter.bin",
+    string? MergeOutGguf = null,
+    int Rank = 16,
+    float Alpha = 32f,
+    float LearningRate = 2e-4f,
+    int Epochs = 3,
+    int BatchSize = 1,
+    int GradAccum = 4,
+    int MaxSeqLen = 512,
+    int? MaxSteps = null,
+    string Device = "auto",
+    bool CheckpointActivations = false);
+
 public static class TuneCommandHandler
 {
-    public static Task<int> ExecuteAsync(string[] args)
+    public static TuneCliOptions ParseOptions(string[] args)
     {
-        if (args.Length == 0)
-        {
-            PrintHelp();
-            return Task.FromResult(1);
-        }
+        ArgumentNullException.ThrowIfNull(args);
 
         string? baseGgufPath = null;
         string? dataJsonlPath = null;
@@ -38,67 +51,128 @@ public static class TuneCommandHandler
         for (int i = 0; i < args.Length; i++)
         {
             string arg = args[i];
-            if (arg is "-m" or "--model" && i + 1 < args.Length)
+            if (arg is "-m" or "--model")
             {
-                baseGgufPath = args[++i];
+                baseGgufPath = CliOptionHelpers.RequireValue(args, ref i, arg);
             }
-            else if (arg is "-d" or "--data" && i + 1 < args.Length)
+            else if (arg is "-d" or "--data")
             {
-                dataJsonlPath = args[++i];
+                dataJsonlPath = CliOptionHelpers.RequireValue(args, ref i, arg);
             }
-            else if (arg is "-o" or "--out" or "--output" && i + 1 < args.Length)
+            else if (arg is "-o" or "--out" or "--output")
             {
-                outAdapterPath = args[++i];
+                outAdapterPath = CliOptionHelpers.RequireValue(args, ref i, arg);
             }
-            else if (arg is "--merge" && i + 1 < args.Length)
+            else if (arg == "--merge")
             {
-                mergeOutGguf = args[++i];
+                mergeOutGguf = CliOptionHelpers.RequireValue(args, ref i, arg);
             }
-            else if (arg is "-r" or "--rank" && i + 1 < args.Length)
+            else if (arg is "-r" or "--rank")
             {
-                rank = int.Parse(args[++i]);
+                rank = ParsePositiveInt(arg, CliOptionHelpers.RequireValue(args, ref i, arg));
             }
-            else if (arg is "--alpha" && i + 1 < args.Length)
+            else if (arg == "--alpha")
             {
-                alpha = float.Parse(args[++i]);
+                alpha = ParsePositiveFloat(arg, CliOptionHelpers.RequireValue(args, ref i, arg));
             }
-            else if (arg is "--lr" && i + 1 < args.Length)
+            else if (arg == "--lr")
             {
-                lr = float.Parse(args[++i]);
+                lr = ParsePositiveFloat(arg, CliOptionHelpers.RequireValue(args, ref i, arg));
             }
-            else if (arg is "-e" or "--epochs" && i + 1 < args.Length)
+            else if (arg is "-e" or "--epochs")
             {
-                epochs = int.Parse(args[++i]);
+                epochs = ParsePositiveInt(arg, CliOptionHelpers.RequireValue(args, ref i, arg));
             }
-            else if (arg is "-s" or "--steps" or "--max-steps" && i + 1 < args.Length)
+            else if (arg is "-s" or "--steps" or "--max-steps")
             {
-                maxSteps = int.Parse(args[++i]);
+                maxSteps = ParsePositiveInt(arg, CliOptionHelpers.RequireValue(args, ref i, arg));
             }
-            else if (arg is "--seq-len" or "--max-seq-len" && i + 1 < args.Length)
+            else if (arg is "--seq-len" or "--max-seq-len")
             {
-                maxSeqLen = int.Parse(args[++i]);
+                maxSeqLen = ParsePositiveInt(arg, CliOptionHelpers.RequireValue(args, ref i, arg));
             }
-            else if (arg is "-b" or "--batch-size" && i + 1 < args.Length)
+            else if (arg is "-b" or "--batch-size")
             {
-                batchSize = int.Parse(args[++i]);
+                batchSize = ParsePositiveInt(arg, CliOptionHelpers.RequireValue(args, ref i, arg));
             }
-            else if (arg is "--grad-accum" && i + 1 < args.Length)
+            else if (arg == "--grad-accum")
             {
-                gradAccum = int.Parse(args[++i]);
+                gradAccum = ParsePositiveInt(arg, CliOptionHelpers.RequireValue(args, ref i, arg));
             }
-            else if (arg is "--device" && i + 1 < args.Length)
+            else if (arg == "--device")
             {
-                device = args[++i];
+                device = CliOptionHelpers.RequireValue(args, ref i, arg);
             }
             else if (arg is "--checkpoint-activations" or "--recompute")
             {
                 checkpointActivations = true;
             }
-            else if (baseGgufPath == null && !arg.StartsWith("-"))
+            else if (arg.StartsWith('-'))
+            {
+                throw new ArgumentException($"Unknown option '{arg}'.");
+            }
+            else if (baseGgufPath == null)
             {
                 baseGgufPath = arg;
             }
+            else
+            {
+                throw new ArgumentException($"Unexpected positional argument '{arg}'.");
+            }
         }
+
+        return new TuneCliOptions(
+            BaseGgufPath: baseGgufPath,
+            DataJsonlPath: dataJsonlPath,
+            OutAdapterPath: outAdapterPath,
+            MergeOutGguf: mergeOutGguf,
+            Rank: rank,
+            Alpha: alpha,
+            LearningRate: lr,
+            Epochs: epochs,
+            BatchSize: batchSize,
+            GradAccum: gradAccum,
+            MaxSeqLen: maxSeqLen,
+            MaxSteps: maxSteps,
+            Device: device,
+            CheckpointActivations: checkpointActivations);
+    }
+
+    public static Task<int> ExecuteAsync(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            PrintHelp();
+            return Task.FromResult(1);
+        }
+
+        TuneCliOptions opts;
+        try
+        {
+            opts = ParseOptions(args);
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            Console.ResetColor();
+            return Task.FromResult(1);
+        }
+
+        string? baseGgufPath = opts.BaseGgufPath;
+        string? dataJsonlPath = opts.DataJsonlPath;
+        string outAdapterPath = opts.OutAdapterPath;
+        string? mergeOutGguf = opts.MergeOutGguf;
+        int rank = opts.Rank;
+        float alpha = opts.Alpha;
+        float lr = opts.LearningRate;
+        int epochs = opts.Epochs;
+        int batchSize = opts.BatchSize;
+        int gradAccum = opts.GradAccum;
+        int maxSeqLen = opts.MaxSeqLen;
+        int? maxSteps = opts.MaxSteps;
+        string device = opts.Device;
+        bool checkpointActivations = opts.CheckpointActivations;
 
         if (string.IsNullOrEmpty(baseGgufPath))
         {
@@ -207,5 +281,22 @@ public static class TuneCommandHandler
         Console.WriteLine("  --grad-accum <int>                   Gradient accumulation steps (default: 4)");
         Console.WriteLine("  --device <auto|cuda|cpu>             Compute target accelerator (default: auto)");
         Console.WriteLine("  --merge <output.gguf>                Automatically fuse adapter into standalone GGUF on completion");
+    }
+
+    private static int ParsePositiveInt(string flag, string rawValue)
+    {
+        if (!int.TryParse(rawValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) || parsed <= 0)
+            throw new ArgumentException($"Invalid {flag} '{rawValue}'. Expected a positive integer.");
+        return parsed;
+    }
+
+    private static float ParsePositiveFloat(string flag, string rawValue)
+    {
+        if (!float.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed) ||
+            !float.IsFinite(parsed) || parsed <= 0f)
+        {
+            throw new ArgumentException($"Invalid {flag} '{rawValue}'. Expected a positive finite number.");
+        }
+        return parsed;
     }
 }

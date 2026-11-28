@@ -1,22 +1,98 @@
 namespace Glacier.Cli.Commands;
 
 using System;
+using System.Buffers;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32.SafeHandles;
+
+public sealed record PullCliOptions(
+    string Spec,
+    string OutDir = "./models",
+    string? TargetFile = null,
+    string? ExpectedSha256 = null,
+    int ParallelConnections = 4);
 
 public static class PullCommandHandler
 {
+    public const long DefaultParallelThresholdBytes = 8L * 1024L * 1024L;
     private static readonly HttpClient _sharedHttp = new HttpClient { Timeout = TimeSpan.FromHours(4) };
 
-    public static Task<int> ExecuteAsync(string[] args) => ExecuteAsync(args, customHandler: null);
+    public static PullCliOptions ParseOptions(string[] args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
 
-    public static async Task<int> ExecuteAsync(string[] args, HttpMessageHandler? customHandler)
+        string? spec = null;
+        string outDir = "./models";
+        string? targetFile = null;
+        string? expectedSha256 = null;
+        int parallelConnections = 4;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            string arg = args[i];
+            if (arg is "-o" or "--out")
+            {
+                outDir = CliOptionHelpers.RequireValue(args, ref i, arg);
+            }
+            else if (arg is "-f" or "--file")
+            {
+                targetFile = CliOptionHelpers.RequireValue(args, ref i, arg);
+            }
+            else if (arg == "--sha256")
+            {
+                expectedSha256 = NormalizeAndValidateSha256(CliOptionHelpers.RequireValue(args, ref i, arg));
+            }
+            else if (arg == "--parallel")
+            {
+                string raw = CliOptionHelpers.RequireValue(args, ref i, arg);
+                if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out parallelConnections) ||
+                    parallelConnections < 1 || parallelConnections > 16)
+                {
+                    throw new ArgumentException($"Invalid --parallel '{raw}'. Expected integer 1..16.");
+                }
+            }
+            else if (arg.StartsWith('-'))
+            {
+                throw new ArgumentException($"Unknown option '{arg}'.");
+            }
+            else if (spec == null)
+            {
+                spec = arg;
+            }
+            else
+            {
+                throw new ArgumentException($"Unexpected positional argument '{arg}'.");
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(spec))
+            throw new ArgumentException("Missing repository or URL specification.");
+
+        return new PullCliOptions(spec, outDir, targetFile, expectedSha256, parallelConnections);
+    }
+
+    public static Task<int> ExecuteAsync(string[] args)
+        => ExecuteAsync(args, customHandler: null, CancellationToken.None, DefaultParallelThresholdBytes);
+
+    public static Task<int> ExecuteAsync(string[] args, HttpMessageHandler? customHandler)
+        => ExecuteAsync(args, customHandler, CancellationToken.None, DefaultParallelThresholdBytes);
+
+    public static async Task<int> ExecuteAsync(
+        string[] args,
+        HttpMessageHandler? customHandler,
+        CancellationToken cancellationToken,
+        long parallelThresholdBytes = DefaultParallelThresholdBytes)
     {
         if (args.Length == 0)
         {
@@ -24,23 +100,20 @@ public static class PullCommandHandler
             return 1;
         }
 
-        string spec = args[0];
-        string outDir = "./models";
-        string? targetFile = null;
-
-        for (int i = 1; i < args.Length; i++)
+        PullCliOptions opts;
+        try
         {
-            if (args[i] is "-o" or "--out" && i + 1 < args.Length)
-            {
-                outDir = args[++i];
-            }
-            else if (args[i] is "-f" or "--file" && i + 1 < args.Length)
-            {
-                targetFile = args[++i];
-            }
+            opts = ParseOptions(args);
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            Console.ResetColor();
+            return 1;
         }
 
-        Directory.CreateDirectory(outDir);
+        Directory.CreateDirectory(opts.OutDir);
 
         using HttpClient? ownedClient = customHandler != null
             ? new HttpClient(customHandler, disposeHandler: false) { Timeout = TimeSpan.FromHours(4) }
@@ -51,28 +124,28 @@ public static class PullCommandHandler
         string downloadUrl;
         string rawFileName;
 
-        if (spec.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            spec.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        if (opts.Spec.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            opts.Spec.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            downloadUrl = spec;
-            rawFileName = targetFile ?? Path.GetFileName(new Uri(spec).LocalPath);
+            downloadUrl = opts.Spec;
+            rawFileName = opts.TargetFile ?? Path.GetFileName(new Uri(opts.Spec).LocalPath);
         }
         else
         {
-            // HuggingFace repo spec e.g. "Qwen/Qwen2.5-7B-Instruct-GGUF" or "user/repo:filename"
-            string repo = spec;
+            string repo = opts.Spec;
+            string? repoFile = opts.TargetFile;
             if (repo.Contains(':'))
             {
                 var parts = repo.Split(':', 2);
                 repo = parts[0];
-                targetFile ??= parts[1];
+                repoFile ??= parts[1];
             }
 
-            if (string.IsNullOrEmpty(targetFile))
+            if (string.IsNullOrEmpty(repoFile))
             {
                 Console.WriteLine($"[Glacier.Pull] Resolving GGUF files in repository: {repo}...");
-                targetFile = await ResolveDefaultGgufFileAsync(http, repo, hfToken);
-                if (string.IsNullOrEmpty(targetFile))
+                repoFile = await ResolveDefaultGgufFileAsync(http, repo, hfToken, cancellationToken).ConfigureAwait(false);
+                if (string.IsNullOrEmpty(repoFile))
                 {
                     Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine($"Error: No GGUF file found in repository '{repo}'. Specify with --file <filename>.");
@@ -81,14 +154,14 @@ public static class PullCommandHandler
                 }
             }
 
-            downloadUrl = $"https://huggingface.co/{repo}/resolve/main/{Uri.EscapeDataString(targetFile).Replace("%2F", "/")}";
-            rawFileName = targetFile;
+            downloadUrl = $"https://huggingface.co/{repo}/resolve/main/{Uri.EscapeDataString(repoFile).Replace("%2F", "/")}";
+            rawFileName = repoFile;
         }
 
         string destPath;
         try
         {
-            destPath = ResolveSafeDestinationPath(outDir, rawFileName);
+            destPath = ResolveSafeDestinationPath(opts.OutDir, rawFileName);
         }
         catch (ArgumentException ex)
         {
@@ -110,7 +183,223 @@ public static class PullCommandHandler
         Console.WriteLine($"  Destination: {destPath}\n");
 
         long existingOffset = File.Exists(partPath) ? new FileInfo(partPath).Length : 0L;
+        var sw = Stopwatch.StartNew();
 
+        bool downloadedParallel = false;
+        if (opts.ParallelConnections > 1 && existingOffset == 0)
+        {
+            downloadedParallel = await TryParallelDownloadAsync(
+                http,
+                downloadUrl,
+                partPath,
+                opts.ParallelConnections,
+                parallelThresholdBytes,
+                hfToken,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (!downloadedParallel)
+        {
+            await DownloadSequentialResumableAsync(
+                http,
+                downloadUrl,
+                partPath,
+                existingOffset,
+                hfToken,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        sw.Stop();
+        Console.WriteLine();
+
+        byte[] magic = new byte[4];
+        long finalLength;
+        string? actualSha256 = null;
+
+        using (var verifyStream = new FileStream(partPath, FileMode.Open, FileAccess.Read, FileShare.Read, 256 * 1024, useAsync: true))
+        {
+            finalLength = verifyStream.Length;
+            if (finalLength >= 4)
+            {
+                await verifyStream.ReadExactlyAsync(magic.AsMemory(0, 4), cancellationToken).ConfigureAwait(false);
+            }
+
+            if (opts.ExpectedSha256 != null && finalLength >= 4 && Encoding.ASCII.GetString(magic) == "GGUF")
+            {
+                verifyStream.Position = 0;
+                byte[] hash = await SHA256.HashDataAsync(verifyStream, cancellationToken).ConfigureAwait(false);
+                actualSha256 = Convert.ToHexString(hash);
+            }
+        }
+
+        string magicStr = finalLength >= 4 ? Encoding.ASCII.GetString(magic) : string.Empty;
+        if (finalLength < 4 || magicStr != "GGUF")
+        {
+            TryDeleteCorruptPart(partPath);
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"\nError: Downloaded payload failed GGUF header validation (length={finalLength}, magic='{magicStr}'). Corrupt file removed.");
+            Console.ResetColor();
+            return 1;
+        }
+
+        if (opts.ExpectedSha256 != null &&
+            !string.Equals(actualSha256, opts.ExpectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            TryDeleteCorruptPart(partPath);
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine(
+                $"\nError: SHA-256 verification failed. Expected {opts.ExpectedSha256}, actual {actualSha256}. Corrupt file removed.");
+            Console.ResetColor();
+            return 1;
+        }
+
+        File.Move(partPath, destPath, overwrite: true);
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"\n✓ Download complete & GGUF header verified in {sw.Elapsed.TotalSeconds:F1}s ({finalLength / 1e9:F2} GB)!");
+        if (actualSha256 != null)
+            Console.WriteLine($"✓ SHA-256 verified: {actualSha256.ToLowerInvariant()}");
+        Console.WriteLine($"✓ Model ready for instant execution: glacier run \"{destPath}\"");
+        Console.ResetColor();
+
+        return 0;
+    }
+
+    private static async Task<bool> TryParallelDownloadAsync(
+        HttpClient http,
+        string downloadUrl,
+        string partPath,
+        int parallelConnections,
+        long parallelThresholdBytes,
+        string? hfToken,
+        CancellationToken cancellationToken)
+    {
+        long totalLength;
+        try
+        {
+            using var headReq = new HttpRequestMessage(HttpMethod.Head, downloadUrl);
+            headReq.Headers.UserAgent.ParseAdd("Glacier-Cli/1.1");
+            if (!string.IsNullOrWhiteSpace(hfToken))
+                headReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", hfToken);
+
+            using var headRes = await http.SendAsync(headReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            if (!headRes.IsSuccessStatusCode)
+                return false;
+
+            if (headRes.Content.Headers.ContentLength is not long len || len < parallelThresholdBytes)
+                return false;
+
+            bool acceptsBytes = false;
+            foreach (string unit in headRes.Headers.AcceptRanges)
+            {
+                if (unit.Equals("bytes", StringComparison.OrdinalIgnoreCase))
+                {
+                    acceptsBytes = true;
+                    break;
+                }
+            }
+            if (!acceptsBytes)
+                return false;
+
+            totalLength = len;
+        }
+        catch (HttpRequestException ex)
+        {
+            Trace.TraceWarning($"[Glacier.Pull] Parallel HEAD probe fell back to sequential download: {ex.Message}");
+            return false;
+        }
+
+        using (var fs = new FileStream(partPath, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite, 4096, useAsync: true))
+        {
+            fs.SetLength(totalLength);
+        }
+
+        const long maxChunkBytes = 8L * 1024L * 1024L;
+        long targetChunk = Math.Max(256L, (totalLength + parallelConnections - 1) / parallelConnections);
+        long chunkSize = Math.Min(maxChunkBytes, targetChunk);
+
+        var ranges = new List<(long Start, long End)>();
+        for (long offset = 0; offset < totalLength; offset += chunkSize)
+        {
+            long end = Math.Min(totalLength - 1, offset + chunkSize - 1);
+            ranges.Add((offset, end));
+        }
+
+        using SafeFileHandle handle = File.OpenHandle(
+            partPath,
+            FileMode.Open,
+            FileAccess.Write,
+            FileShare.ReadWrite,
+            FileOptions.Asynchronous);
+
+        using var throttle = new SemaphoreSlim(parallelConnections);
+        var tasks = new List<Task>(ranges.Count);
+        foreach ((long start, long end) in ranges)
+        {
+            tasks.Add(DownloadRangeAsync(http, downloadUrl, handle, start, end, hfToken, throttle, cancellationToken));
+        }
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+        return true;
+    }
+
+    private static async Task DownloadRangeAsync(
+        HttpClient http,
+        string downloadUrl,
+        SafeFileHandle handle,
+        long start,
+        long end,
+        string? hfToken,
+        SemaphoreSlim throttle,
+        CancellationToken cancellationToken)
+    {
+        await throttle.WaitAsync(cancellationToken).ConfigureAwait(false);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(256 * 1024);
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
+            req.Headers.UserAgent.ParseAdd("Glacier-Cli/1.1");
+            if (!string.IsNullOrWhiteSpace(hfToken))
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", hfToken);
+            req.Headers.Range = new RangeHeaderValue(start, end);
+
+            using var res = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            res.EnsureSuccessStatusCode();
+
+            using Stream body = await res.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            long writeOffset = start;
+            long remaining = end - start + 1;
+
+            while (remaining > 0)
+            {
+                int toRead = (int)Math.Min(buffer.Length, remaining);
+                int read = await body.ReadAsync(buffer.AsMemory(0, toRead), cancellationToken).ConfigureAwait(false);
+                if (read == 0)
+                    break;
+
+                await RandomAccess.WriteAsync(handle, buffer.AsMemory(0, read), writeOffset, cancellationToken).ConfigureAwait(false);
+                writeOffset += read;
+                remaining -= read;
+            }
+
+            if (remaining != 0)
+                throw new EndOfStreamException($"Range [{start}..{end}] ended early ({remaining} byte(s) missing).");
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+            throttle.Release();
+        }
+    }
+
+    private static async Task DownloadSequentialResumableAsync(
+        HttpClient http,
+        string downloadUrl,
+        string partPath,
+        long existingOffset,
+        string? hfToken,
+        CancellationToken cancellationToken)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
         request.Headers.UserAgent.ParseAdd("Glacier-Cli/1.1");
         if (!string.IsNullOrWhiteSpace(hfToken))
@@ -122,8 +411,7 @@ public static class PullCommandHandler
             request.Headers.Range = new RangeHeaderValue(existingOffset, null);
         }
 
-        var sw = Stopwatch.StartNew();
-        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         bool isPartialResume = existingOffset > 0 && response.StatusCode == HttpStatusCode.PartialContent;
@@ -131,20 +419,18 @@ public static class PullCommandHandler
         long contentLength = response.Content.Headers.ContentLength ?? -1L;
         long totalBytes = contentLength >= 0 ? initialBytes + contentLength : -1L;
 
-        using var contentStream = await response.Content.ReadAsStreamAsync();
+        using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         FileMode fileMode = isPartialResume ? FileMode.Open : FileMode.Create;
 
-        byte[] magic = new byte[4];
-        long finalLength;
-
-        using (var fileStream = new FileStream(partPath, fileMode, FileAccess.ReadWrite, FileShare.None, 1024 * 1024))
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(256 * 1024);
+        try
         {
+            using var fileStream = new FileStream(partPath, fileMode, FileAccess.ReadWrite, FileShare.None, 1024 * 1024, useAsync: true);
             if (isPartialResume)
             {
                 fileStream.Seek(0, SeekOrigin.End);
             }
 
-            byte[] buffer = new byte[256 * 1024];
             long downloaded = initialBytes;
             int bytesRead;
             var lastReport = Stopwatch.StartNew();
@@ -153,9 +439,9 @@ public static class PullCommandHandler
             TrySetCursorVisible(false);
             try
             {
-                while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                while ((bytesRead = await contentStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
                 {
-                    await fileStream.WriteAsync(buffer, 0, bytesRead);
+                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
                     downloaded += bytesRead;
 
                     if (lastReport.ElapsedMilliseconds > 200)
@@ -186,36 +472,43 @@ public static class PullCommandHandler
                 TrySetCursorVisible(true);
             }
 
-            await fileStream.FlushAsync();
-            finalLength = fileStream.Length;
-            if (finalLength >= 4)
-            {
-                fileStream.Seek(0, SeekOrigin.Begin);
-                fileStream.ReadExactly(magic, 0, 4);
-            }
+            await fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
-
-        sw.Stop();
-        Console.WriteLine();
-
-        string magicStr = finalLength >= 4 ? Encoding.ASCII.GetString(magic) : string.Empty;
-        if (finalLength < 4 || magicStr != "GGUF")
+        finally
         {
-            try { File.Delete(partPath); } catch { }
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"\nError: Downloaded payload failed GGUF header validation (length={finalLength}, magic='{magicStr}'). Corrupt file removed.");
-            Console.ResetColor();
-            return 1;
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static void TryDeleteCorruptPart(string partPath)
+    {
+        try
+        {
+            if (File.Exists(partPath))
+                File.Delete(partPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Trace.TraceWarning($"[Glacier.Pull] Unable to remove corrupt partial file '{partPath}': {ex.Message}");
+        }
+    }
+
+    private static string NormalizeAndValidateSha256(string raw)
+    {
+        string trimmed = raw.Trim();
+        if (trimmed.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+            trimmed = trimmed["sha256:".Length..].Trim();
+
+        if (trimmed.Length != 64)
+            throw new ArgumentException($"Invalid --sha256 digest '{raw}'. Expected 64 hex characters.");
+
+        for (int i = 0; i < trimmed.Length; i++)
+        {
+            if (!Uri.IsHexDigit(trimmed[i]))
+                throw new ArgumentException($"Invalid --sha256 digest '{raw}'. Non-hex character at index {i}.");
         }
 
-        File.Move(partPath, destPath, overwrite: true);
-
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"\n✓ Download complete & GGUF header verified in {sw.Elapsed.TotalSeconds:F1}s ({finalLength / 1e9:F2} GB)!");
-        Console.WriteLine($"✓ Model ready for instant execution: glacier run \"{destPath}\"");
-        Console.ResetColor();
-
-        return 0;
+        return trimmed.ToLowerInvariant();
     }
 
     public static string ResolveSafeDestinationPath(string outDir, string rawFileName)
@@ -223,7 +516,6 @@ public static class PullCommandHandler
         if (string.IsNullOrWhiteSpace(rawFileName))
             throw new ArgumentException("Target filename cannot be empty.", nameof(rawFileName));
 
-        // Reject explicit traversal segments before normalizing
         string normalized = rawFileName.Replace('\\', '/');
         foreach (string segment in normalized.Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -273,7 +565,11 @@ public static class PullCommandHandler
         }
     }
 
-    private static async Task<string?> ResolveDefaultGgufFileAsync(HttpClient http, string repo, string? hfToken)
+    private static async Task<string?> ResolveDefaultGgufFileAsync(
+        HttpClient http,
+        string repo,
+        string? hfToken,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -285,10 +581,10 @@ public static class PullCommandHandler
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", hfToken);
             }
 
-            using var res = await http.SendAsync(request);
+            using var res = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (!res.IsSuccessStatusCode) return null;
 
-            string json = await res.Content.ReadAsStringAsync();
+            string json = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("siblings", out var siblings))
             {
@@ -308,9 +604,9 @@ public static class PullCommandHandler
                 return fallback;
             }
         }
-        catch
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException)
         {
-            // Network fallback
+            Trace.TraceWarning($"[Glacier.Pull] Failed resolving HuggingFace repo manifest '{repo}': {ex.Message}");
         }
         return null;
     }
@@ -330,10 +626,12 @@ public static class PullCommandHandler
         Console.WriteLine("Examples:");
         Console.WriteLine("  glacier pull https://huggingface.co/.../model.gguf");
         Console.WriteLine("  glacier pull lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF");
-        Console.WriteLine("  glacier pull Qwen/Qwen2.5-7B-Instruct-GGUF --file qwen2.5-7b-instruct-q4_k_m.gguf");
+        Console.WriteLine("  glacier pull Qwen/Qwen2.5-7B-Instruct-GGUF --file qwen2.5-7b-instruct-q4_k_m.gguf --sha256 <hex>");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  -o, --out <dir>                      Destination directory (default: ./models)");
         Console.WriteLine("  -f, --file <name>                    Target filename in HuggingFace repository");
+        Console.WriteLine("  --sha256 <hex>                       Verify SHA-256 digest before promoting downloaded file");
+        Console.WriteLine("  --parallel <1..16>                   Concurrent HTTP Range connections (default: 4)");
     }
 }

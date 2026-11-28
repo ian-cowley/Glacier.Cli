@@ -3,6 +3,7 @@ namespace Glacier.Cli;
 using System;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Glacier.Cli.Commands;
 
@@ -33,6 +34,14 @@ public static class Program
             return 0;
         }
 
+        using var cts = new CancellationTokenSource();
+        void OnCancelKeyPress(object? _, ConsoleCancelEventArgs e)
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        }
+        Console.CancelKeyPress += OnCancelKeyPress;
+
         try
         {
             return command switch
@@ -43,8 +52,8 @@ public static class Program
                 "rag" => await RagCommandHandler.ExecuteAsync(cmdArgs),
                 "serve" => await ServeCommandHandler.ExecuteAsync(cmdArgs),
                 "bounce" => await BounceCommandHandler.ExecuteAsync(cmdArgs),
-                "pull" => await PullCommandHandler.ExecuteAsync(cmdArgs),
-                "agent" => await AgentCommandHandler.ExecuteAsync(cmdArgs),
+                "pull" => await PullCommandHandler.ExecuteAsync(cmdArgs, customHandler: null, cancellationToken: cts.Token),
+                "agent" => await AgentCommandHandler.ExecuteAsync(cmdArgs, cts.Token),
                 "inspect" => DiagnosticsCommandHandlers.RunInspect(cmdArgs),
                 "audit-adapter" => AdapterAuditCommandHandler.Execute(cmdArgs),
                 "devices" => DiagnosticsCommandHandlers.RunDevices(cmdArgs),
@@ -55,6 +64,11 @@ public static class Program
                 _ => HandleUnknownCommand(command)
             };
         }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            Console.Error.WriteLine("\n[Glacier] Cancelled.");
+            return 130;
+        }
         catch (Exception ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
@@ -63,6 +77,10 @@ public static class Program
                 Console.Error.WriteLine(ex.ToString());
             Console.ResetColor();
             return 1;
+        }
+        finally
+        {
+            Console.CancelKeyPress -= OnCancelKeyPress;
         }
     }
 

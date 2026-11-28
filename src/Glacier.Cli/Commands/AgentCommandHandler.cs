@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using Glacier.Agent;
 using Glacier.Agent.Llm;
 using Glacier.Agent.Runtime;
+using Glacier.Clavier.Engine;
 using Glacier.Inference.Engine;
 using Glacier.Inference.Hardware;
 using Glacier.Inference.Sampling;
@@ -26,7 +27,8 @@ public sealed record AgentCliOptions(
     string? ApiKey = null,
     int MaxSteps = 8,
     int MaxTokens = 512,
-    string Prompt = "");
+    string Prompt = "",
+    string? ClavierModel = null);
 
 internal sealed record AgentRemoteResolution(
     string? BaseUrl,
@@ -44,6 +46,7 @@ public static class AgentCommandHandler
         string? model = null;
         string? endpoint = null;
         string? apiKey = null;
+        string? clavierModel = null;
         int maxSteps = 8;
         int maxTokens = 512;
         var promptParts = new List<string>();
@@ -64,6 +67,9 @@ public static class AgentCommandHandler
                         break;
                     case "--api-key":
                         apiKey = RequireNonEmptyOptionValue(eqFlag, eqValue);
+                        break;
+                    case "--clavier-model":
+                        clavierModel = RequireNonEmptyOptionValue(eqFlag, eqValue);
                         break;
                     case "--max-steps":
                         maxSteps = ParsePositiveInt(eqFlag, RequireNonEmptyOptionValue(eqFlag, eqValue));
@@ -94,6 +100,9 @@ public static class AgentCommandHandler
                 case "--api-key":
                     apiKey = CliOptionHelpers.RequireValue(args, ref i, arg);
                     break;
+                case "--clavier-model":
+                    clavierModel = RequireNonEmptyOptionValue(arg, CliOptionHelpers.RequireValue(args, ref i, arg));
+                    break;
                 case "--max-steps":
                     maxSteps = ParsePositiveInt(arg, CliOptionHelpers.RequireValue(args, ref i, arg));
                     break;
@@ -116,11 +125,15 @@ public static class AgentCommandHandler
             ApiKey: apiKey,
             MaxSteps: maxSteps,
             MaxTokens: maxTokens,
-            Prompt: string.Join(" ", promptParts).Trim());
+            Prompt: string.Join(" ", promptParts).Trim(),
+            ClavierModel: clavierModel);
     }
 
     public static Task<int> ExecuteAsync(string[] args)
         => ExecuteAsync(args, httpClient: null, npuCandidates: null, deviceProvider: null, cancellationToken: default);
+
+    public static Task<int> ExecuteAsync(string[] args, CancellationToken cancellationToken)
+        => ExecuteAsync(args, httpClient: null, npuCandidates: null, deviceProvider: null, cancellationToken: cancellationToken);
 
     public static async Task<int> ExecuteAsync(
         string[] args,
@@ -190,6 +203,19 @@ public static class AgentCommandHandler
                 Console.ResetColor();
                 return 1;
             }
+        }
+
+        ClavierSession? conformalRouter = null;
+        try
+        {
+            conformalRouter = LoadOptionalClavierSession(opts.ClavierModel);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or InvalidDataException or EndOfStreamException or IOException or ArgumentException)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"Error: Failed to load --clavier-model '{opts.ClavierModel}': {ex.Message}");
+            Console.ResetColor();
+            return 1;
         }
 
         Console.ForegroundColor = ConsoleColor.Cyan;
@@ -286,11 +312,11 @@ public static class AgentCommandHandler
 
                 engine.AttachEpisodicMemory(episodicMemory);
 
-                using var conformalRouter = new Glacier.Clavier.Engine.ClavierSession(
-                    embeddingDim: 16,
-                    hiddenDim: 16,
-                    numActions: Math.Max(2, engine.Tools.Tools.Count));
-                engine.AttachConformalRouter(conformalRouter);
+                if (conformalRouter != null)
+                {
+                    engine.AttachConformalRouter(conformalRouter);
+                }
+
                 AttachConsoleLogger(engine);
 
                 try
@@ -316,6 +342,7 @@ public static class AgentCommandHandler
                         opts,
                         sessionId,
                         deviceProvider,
+                        conformalRouter,
                         cancellationToken).ConfigureAwait(false);
                 }
                 catch (HttpRequestException ex)
@@ -338,6 +365,7 @@ public static class AgentCommandHandler
                         opts,
                         sessionId,
                         deviceProvider,
+                        conformalRouter,
                         cancellationToken).ConfigureAwait(false);
                 }
             }
@@ -354,6 +382,7 @@ public static class AgentCommandHandler
                     opts,
                     sessionId,
                     deviceProvider,
+                    conformalRouter,
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -368,9 +397,56 @@ public static class AgentCommandHandler
         }
         finally
         {
+            conformalRouter?.Dispose();
             probeClient?.Dispose();
             if (ownsHttpClient)
                 effectiveClient.Dispose();
+        }
+    }
+
+    internal static ClavierSession? LoadOptionalClavierSession(string? clavierModelPath)
+    {
+        if (string.IsNullOrWhiteSpace(clavierModelPath))
+            return null;
+
+        string fullPath = Path.GetFullPath(clavierModelPath.Trim());
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"Clavier checkpoint file not found: '{fullPath}'.", fullPath);
+
+        using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var reader = new BinaryReader(fs, Encoding.UTF8, leaveOpen: true);
+
+        if (fs.Length < 20)
+            throw new InvalidDataException($"Clavier checkpoint '{fullPath}' is shorter than the 20-byte header.");
+
+        uint magic = reader.ReadUInt32();
+        if (magic != 0x52564C43u)
+            throw new InvalidDataException($"Invalid Clavier checkpoint magic header 0x{magic:X8}.");
+
+        int version = reader.ReadInt32();
+        if (version < 1 || version > 3)
+            throw new InvalidDataException($"Unsupported Clavier checkpoint version {version}.");
+
+        int embDim = reader.ReadInt32();
+        int hidDim = reader.ReadInt32();
+        int numActions = reader.ReadInt32();
+        if (embDim <= 0 || embDim > 16384 || hidDim <= 0 || hidDim > 16384 || numActions <= 0 || numActions > 16384)
+        {
+            throw new InvalidDataException(
+                $"Invalid Clavier checkpoint dimensions ({embDim}, {hidDim}, {numActions}).");
+        }
+
+        fs.Position = 0;
+        var session = new ClavierSession(embDim, hidDim, numActions);
+        try
+        {
+            session.LoadCheckpoint(fs);
+            return session;
+        }
+        catch
+        {
+            session.Dispose();
+            throw;
         }
     }
 
@@ -454,6 +530,7 @@ public static class AgentCommandHandler
         AgentCliOptions opts,
         string sessionId,
         Func<IReadOnlyList<DeviceInfo>>? deviceProvider,
+        ClavierSession? conformalRouter,
         CancellationToken cancellationToken)
     {
         bool hasLocalGguf = !string.IsNullOrEmpty(opts.Model) && File.Exists(opts.Model);
@@ -473,11 +550,11 @@ public static class AgentCommandHandler
         });
         engine.AttachEpisodicMemory(episodicMemory);
 
-        using var conformalRouter = new Glacier.Clavier.Engine.ClavierSession(
-            embeddingDim: 16,
-            hiddenDim: 16,
-            numActions: Math.Max(2, engine.Tools.Tools.Count));
-        engine.AttachConformalRouter(conformalRouter);
+        if (conformalRouter != null)
+        {
+            engine.AttachConformalRouter(conformalRouter);
+        }
+
         AttachConsoleLogger(engine);
 
         return session != null
@@ -567,6 +644,7 @@ public static class AgentCommandHandler
         Console.WriteLine("  --endpoint <url|auto-npu>            OpenAI-compatible endpoint (or 'auto-npu' for FastFlowLM/Lemonade)");
         Console.WriteLine("  --npu                                Shorthand for --endpoint auto-npu (zero-VRAM NPU execution)");
         Console.WriteLine("  --api-key <key>                      Optional bearer token for remote endpoints");
+        Console.WriteLine("  --clavier-model <path>               Optional trained Clavier checkpoint (.clvr) for System-1 routing");
         Console.WriteLine("  --max-steps <int>                    Maximum reasoning/tool steps (default: 8)");
         Console.WriteLine("  -n, --tokens, --max-tokens <int>     Max tokens per LLM step (default: 512)");
         Console.WriteLine();
