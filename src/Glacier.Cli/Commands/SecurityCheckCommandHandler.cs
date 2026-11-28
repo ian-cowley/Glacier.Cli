@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 public sealed record SecurityFinding(string RelativePath, int LineNumber, string SecretType, string RedactedPreview);
@@ -18,7 +19,7 @@ public static partial class SecurityCheckCommandHandler
         "packages", "benchmarkdotnet.artifacts", ".gemini", "tmp",
         "nuget-local", "dist", "scratch", "scratch_challenger_1",
         "scratch_challenger_2", "scratch_challenger_3", "models",
-        "publish_win", "publish_linux", "cache"
+        "publish_win", "publish_linux", "cache", "__pycache__"
     };
 
     private static readonly HashSet<string> IgnoredExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -27,7 +28,7 @@ public static partial class SecurityCheckCommandHandler
         ".gif", ".ico", ".pdf", ".zip", ".tar", ".gz", ".nupkg", ".gguf",
         ".bin", ".parquet", ".feather", ".mp4", ".mp3", ".wav", ".mkv",
         ".avi", ".flac", ".pt", ".pth", ".safetensors", ".onnx", ".csr",
-        ".part", ".tmp"
+        ".part", ".tmp", ".pyc"
     };
 
     private static readonly HashSet<string> EnvYamlExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -62,13 +63,16 @@ public static partial class SecurityCheckCommandHandler
     [GeneratedRegex(@"\bxox[baprs]-[0-9a-zA-Z]{10,48}\b")]
     private static partial Regex SlackTokenRegex();
 
-    [GeneratedRegex(@"(?:api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|password|client[_-]?secret)\s*[:=]\s*[""']([^""'\s]{12,})[""']", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\boy2[a-z0-9]{43}\b")]
+    private static partial Regex NuGetApiKeyRegex();
+
+    [GeneratedRegex(@"(?:api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|password|(?<![a-z0-9])(?:db|pg|postgres|postgresql|sql|mysql|mariadb|mssql|oracle|sqlite|redis|mongo|mongodb|amqp|rabbitmq|kafka|smtp|imap|pop3|ftp|sftp|ssh|ldap|admin|root|auth|user|proxy|vault|sudo|master|keystore|truststore|tls|ssl|cert|api|client|service|app|prod|staging|dev|backup|encrypt|decrypt|session|token|secret)_pass|client[_-]?secret)\s*[:=]\s*[""']([^""'\s]{12,})[""']", RegexOptions.IgnoreCase)]
     private static partial Regex GenericSecretRegex();
 
-    [GeneratedRegex(@"(?:^|\s)(?:export\s+)?(?:[A-Z0-9_]*?(?:api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|password|client[_-]?secret))\s*[:=]\s*(?![""'])(?!\$\{?|\$\()([^""'\s#]{12,})", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?:^|\s)(?:export\s+)?(?:[A-Z0-9_]*?(?:api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|password|(?<![a-z0-9])(?:db|pg|postgres|postgresql|sql|mysql|mariadb|mssql|oracle|sqlite|redis|mongo|mongodb|amqp|rabbitmq|kafka|smtp|imap|pop3|ftp|sftp|ssh|ldap|admin|root|auth|user|proxy|vault|sudo|master|keystore|truststore|tls|ssl|cert|api|client|service|app|prod|staging|dev|backup|encrypt|decrypt|session|token|secret)_pass|client[_-]?secret))\s*[:=]\s*(?![""'])(\$\{\{[^}\r\n]+\}\}[^\s#]*|\$\{(?:[^{}\r\n]|\$\{[^}\r\n]*\})+\}[^\s#]*|[^""'\s#]{12,})", RegexOptions.IgnoreCase)]
     private static partial Regex UnquotedConfigSecretRegex();
 
-    [GeneratedRegex(@"(?:Password|Pwd)\s*=\s*([^;\s""'<>$]{8,})|(?:postgres(?:ql)?|mongodb(?:\+srv)?|mysql|redis|amqp):\/\/[^:\s/@]+:([^@\s""'<>$]{6,})@", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?:\b(?:Password|Pwd)=(?!\{[A-Za-z_][A-Za-z0-9_]*\}(?:[;""'\s@]|$))([^;\s""'<>]{8,})|\b(?:Password|Pwd)\s*=\s*(?!\{[A-Za-z_][A-Za-z0-9_]*\}(?:[;""'\s@]|$))([^;\s""'<>]{8,})(?=\s*;[^""'\r\n]*\b(?:Host|Server|Database|Data\s+Source|Port|Uid|User\s+Id|Username|Pwd|Password|SslMode|Trusted_Connection|Integrated\s+Security)\s*=)|;\s*(?:Password|Pwd)\s*=\s*(?!\{[A-Za-z_][A-Za-z0-9_]*\}(?:[;""'\s@]|$))([^;\s""'<>]{8,}))|(?:postgres(?:ql)?|mongodb(?:\+srv)?|mysql|redis|amqp):\/\/[^:\s/@]+:(?!\{[A-Za-z_][A-Za-z0-9_]*\}(?:[;""'\s@]|$))([^@\s""'<>]{6,})@", RegexOptions.IgnoreCase)]
     private static partial Regex ConnectionStringSecretRegex();
 
     [GeneratedRegex(@"(?:private[_-]?key|priv[_-]?key|wallet[_-]?key|signer[_-]?key|secret)\s*[:=]\s*[""']?(0x[0-9a-f]{64})[""']?", RegexOptions.IgnoreCase)]
@@ -83,20 +87,73 @@ public static partial class SecurityCheckCommandHandler
     [GeneratedRegex(@"(?:your[-_]?api[-_]?key|^YOUR_[A-Z0-9_]+$|placeholder|dummy|fake|sample|example|process\.env|environment\.getenvironmentvariable|config\[""|AIzaSyDummy|Bearer\s+\$TOKEN)", RegexOptions.IgnoreCase)]
     private static partial Regex GenericAllowlistRegex();
 
-    [GeneratedRegex(@"ReadOnlySpan<byte>\s+password\s*=\s*""UserMasterPassword""")]
+    [GeneratedRegex(@"^(?:\$\{\{\s*(?:secrets|steps|github|env|vars|inputs)\.[A-Za-z0-9_.\-]+\s*\}\}|\$\{[A-Za-z_][A-Za-z0-9_]*(?::[-=?+](?:\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|""""|''|))?\}|\$(?:env:)?[A-Za-z_][A-Za-z0-9_]*)$", RegexOptions.IgnoreCase)]
+    private static partial Regex ShellOrCiExpressionAllowlistRegex();
+
+    [GeneratedRegex(@"ReadOnlySpan<byte>\s+password\s*=\s*""UserMasterPassword""|Host\s*=\s*(?:localhost|127\.0\.0\.1)\b[^""'\r\n;]*(?:;(?!\s*(?:Password|Pwd)\s*=)[^""'\r\n;]*)*(;\s*(?:Password|Pwd)\s*=\s*(?:postgres|benchpass|testpass|changeme)\b)", RegexOptions.IgnoreCase)]
     private static partial Regex ContextualAllowlistRegex();
 
     public static int Execute(string[] args)
     {
-        string target = args.Length > 0 && !args[0].StartsWith('-') ? args[0] : ".";
+        string? targetArg = null;
+        bool includeScratch = false;
+        bool jsonOutput = false;
+
+        foreach (string arg in args)
+        {
+            if (arg == "--include-scratch")
+            {
+                includeScratch = true;
+            }
+            else if (arg == "--json")
+            {
+                jsonOutput = true;
+            }
+            else if (arg.StartsWith('-'))
+            {
+                Console.Error.WriteLine($"[ERROR] Unknown option: {arg}");
+                return 1;
+            }
+            else if (targetArg is null)
+            {
+                targetArg = arg;
+            }
+            else
+            {
+                Console.Error.WriteLine($"[ERROR] Unexpected positional argument: {arg}");
+                return 1;
+            }
+        }
+
+        string target = targetArg ?? ".";
         if (!Directory.Exists(target) && !File.Exists(target))
         {
             Console.Error.WriteLine($"[ERROR] Target path does not exist: {target}");
+            if (jsonOutput)
+            {
+                WriteJsonSummary(target, includeScratch, exitCode: 2, new SecurityScanSummary(0, []));
+            }
             return 2;
         }
 
-        Console.WriteLine($"[SECURITY] Running Glacier C# Secrets Scanner on: {Path.GetFullPath(target)}");
-        var summary = ScanPath(target);
+        if (!jsonOutput)
+        {
+            Console.WriteLine($"[SECURITY] Running Glacier C# Secrets Scanner on: {Path.GetFullPath(target)}");
+        }
+
+        var summary = ScanPath(target, includeScratch);
+        int exitCode = summary.Findings.Count > 0 ? 1 : 0;
+
+        if (jsonOutput)
+        {
+            WriteJsonSummary(target, includeScratch, exitCode, summary);
+            if (exitCode != 0)
+            {
+                Console.Error.WriteLine("Commit/Publish BLOCKED. Please remove or sanitize secrets before proceeding.");
+            }
+            return exitCode;
+        }
+
         Console.WriteLine($"  Scanned {summary.FilesScanned} files.");
 
         if (summary.Findings.Count > 0)
@@ -120,14 +177,19 @@ public static partial class SecurityCheckCommandHandler
 
     public static void PrintHelp()
     {
-        Console.WriteLine("Usage: glacier security-check [path]");
+        Console.WriteLine("Usage: glacier security-check [path] [--include-scratch] [--json]");
         Console.WriteLine();
         Console.WriteLine("Scans files recursively for exposed API keys, private keys, connection strings, and credentials.");
         Console.WriteLine("Scans .github workflows and streams large text files line-by-line.");
-        Console.WriteLine("Exit codes: 0 = clean, 1 = secrets detected, 2 = invalid target path.");
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --include-scratch    Include scratch* directories in recursive scan");
+        Console.WriteLine("  --json               Emit structured JSON summary on stdout");
+        Console.WriteLine("Exit codes: 0 = clean, 1 = secrets detected or invalid flags, 2 = invalid target path.");
     }
 
-    public static SecurityScanSummary ScanPath(string targetPath)
+    public static SecurityScanSummary ScanPath(string targetPath) => ScanPath(targetPath, includeScratch: false);
+
+    public static SecurityScanSummary ScanPath(string targetPath, bool includeScratch)
     {
         var findings = new List<SecurityFinding>();
         int scanned = 0;
@@ -157,7 +219,7 @@ public static partial class SecurityCheckCommandHandler
             foreach (string sub in subDirs)
             {
                 string name = Path.GetFileName(sub);
-                if (ShouldSkipDirectory(name))
+                if (ShouldSkipDirectory(name, includeScratch))
                     continue;
                 stack.Push(sub);
             }
@@ -182,9 +244,13 @@ public static partial class SecurityCheckCommandHandler
         return new SecurityScanSummary(scanned, findings);
     }
 
-    private static bool ShouldSkipDirectory(string dirName)
+    private static bool ShouldSkipDirectory(string dirName, bool includeScratch)
     {
         if (string.IsNullOrEmpty(dirName)) return true;
+        if (includeScratch && dirName.StartsWith("scratch", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
         if (IgnoredDirs.Contains(dirName)) return true;
         if (dirName.StartsWith("scratch", StringComparison.OrdinalIgnoreCase) ||
             dirName.StartsWith("publish_", StringComparison.OrdinalIgnoreCase))
@@ -197,6 +263,34 @@ public static partial class SecurityCheckCommandHandler
             return true;
         }
         return false;
+    }
+
+    private static void WriteJsonSummary(string target, bool includeScratch, int exitCode, SecurityScanSummary summary)
+    {
+        using var ms = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true }))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("target", Path.GetFullPath(target));
+            writer.WriteBoolean("passed", exitCode == 0 && summary.Findings.Count == 0);
+            writer.WriteNumber("exit_code", exitCode);
+            writer.WriteNumber("files_scanned", summary.FilesScanned);
+            writer.WriteBoolean("include_scratch", includeScratch);
+            writer.WriteNumber("findings_count", summary.Findings.Count);
+            writer.WriteStartArray("findings");
+            foreach (var f in summary.Findings)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("relative_path", f.RelativePath);
+                writer.WriteNumber("line_number", f.LineNumber);
+                writer.WriteString("secret_type", f.SecretType);
+                writer.WriteString("redacted_preview", f.RedactedPreview);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+        Console.WriteLine(Encoding.UTF8.GetString(ms.ToArray()));
     }
 
     private static bool ShouldSkipFile(string fileName, string extension)
@@ -301,6 +395,7 @@ public static partial class SecurityCheckCommandHandler
         CheckPattern(PrivateKeyBlockRegex(), "Private Key Block", isGeneric: false, line, lineNo, relativePath, findings);
         CheckPattern(HuggingFaceTokenRegex(), "HuggingFace Token", isGeneric: false, line, lineNo, relativePath, findings);
         CheckPattern(SlackTokenRegex(), "Slack Token", isGeneric: false, line, lineNo, relativePath, findings);
+        CheckPattern(NuGetApiKeyRegex(), "NuGet API Key", isGeneric: false, line, lineNo, relativePath, findings);
         CheckPattern(GenericSecretRegex(), "Generic Secret Assignment", isGeneric: true, line, lineNo, relativePath, findings);
         CheckPattern(ConnectionStringSecretRegex(), "Connection String Credential", isGeneric: true, line, lineNo, relativePath, findings);
         CheckPattern(RawHexPrivateKeyRegex(), "Raw Hex Private Key", isGeneric: true, line, lineNo, relativePath, findings);
@@ -351,7 +446,7 @@ public static partial class SecurityCheckCommandHandler
 
         if (isGeneric)
         {
-            if (GenericAllowlistRegex().IsMatch(token))
+            if (GenericAllowlistRegex().IsMatch(token) || ShellOrCiExpressionAllowlistRegex().IsMatch(token))
                 return true;
         }
         else
@@ -363,7 +458,9 @@ public static partial class SecurityCheckCommandHandler
         int end = start + length;
         foreach (Match allowed in ContextualAllowlistRegex().Matches(line))
         {
-            if (allowed.Index <= start && end <= allowed.Index + allowed.Length)
+            int allowedStart = allowed.Groups[1].Success ? allowed.Groups[1].Index : allowed.Index;
+            int allowedEnd = allowed.Groups[1].Success ? allowed.Groups[1].Index + allowed.Groups[1].Length : allowed.Index + allowed.Length;
+            if (allowedStart <= start && end <= allowedEnd)
                 return true;
         }
 

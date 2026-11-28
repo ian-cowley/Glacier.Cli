@@ -108,7 +108,7 @@ public static class Program
         Console.WriteLine("  inspect <model.gguf>                 Display GGUF architecture, metadata & tensors");
         Console.WriteLine("  bench   <model.gguf> [options]       Measure cold start, prefill tok/s & decode tok/s");
         Console.WriteLine("  config  [options]                    Manage persistent acceleration preferences");
-        Console.WriteLine("  security-check [path]                Scan repository for exposed credentials and secrets");
+        Console.WriteLine("  security-check [path] [options]      Scan repository for exposed credentials and secrets");
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine("Run 'glacier <command> --help' or 'glacier help <command>' for command-specific options.");

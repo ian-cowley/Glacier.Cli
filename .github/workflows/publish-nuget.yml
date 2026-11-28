@@ -47,8 +47,21 @@ jobs:
       - name: Run tests
         run: dotnet test tests/Glacier.Cli.Tests/Glacier.Cli.Tests.csproj --configuration Release --no-restore --no-build --blame-hang --blame-hang-dump-type none --blame-hang-timeout 60s
 
+      - name: Security check
+        run: dotnet run --project src/Glacier.Cli/Glacier.Cli.csproj --configuration Release --no-build -- security-check .
+
       - name: Pack
         run: dotnet pack src/Glacier.Cli/Glacier.Cli.csproj --configuration Release --no-build --output packages
+
+      - name: Publish release archives
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          dotnet publish src/Glacier.Cli/Glacier.Cli.csproj --configuration Release -r win-x64 --no-self-contained -o release/win-x64
+          dotnet publish src/Glacier.Cli/Glacier.Cli.csproj --configuration Release -r linux-x64 --no-self-contained -o release/linux-x64
+          dotnet publish src/Glacier.Cli/Glacier.Cli.csproj --configuration Release -r osx-arm64 --no-self-contained -o release/osx-arm64
+          (cd release/win-x64 && zip -rq ../../packages/glacier-win-x64.zip .)
+          tar -czf packages/glacier-linux-x64.tar.gz -C release/linux-x64 .
+          tar -czf packages/glacier-osx-arm64.tar.gz -C release/osx-arm64 .
 
       - name: NuGet login (OIDC Trusted Publishing)
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
@@ -69,5 +82,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: packages/*.nupkg
+          files: |
+            packages/*.nupkg
+            packages/glacier-win-x64.zip
+            packages/glacier-linux-x64.tar.gz
+            packages/glacier-osx-arm64.tar.gz
           generate_release_notes: true
