@@ -51,6 +51,7 @@ public static class Program
                 "bench" => await DiagnosticsCommandHandlers.RunBenchAsync(cmdArgs),
                 "config" => DiagnosticsCommandHandlers.RunConfig(cmdArgs),
                 "security-check" => SecurityCheckCommandHandler.Execute(cmdArgs),
+                "verify-ecosystem" => VerifyEcosystemCommandHandler.Execute(cmdArgs),
                 _ => HandleUnknownCommand(command)
             };
         }
@@ -111,6 +112,7 @@ public static class Program
         Console.WriteLine("  bench   <model.gguf> [options]       Measure cold start, prefill tok/s & decode tok/s");
         Console.WriteLine("  config  [options]                    Manage persistent acceleration preferences");
         Console.WriteLine("  security-check [path] [options]      Scan repository for exposed credentials and secrets");
+        Console.WriteLine("  verify-ecosystem [root] [options]    Audit cross-repo ProjectReferences, retired packages & secrets");
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine("Run 'glacier <command> --help' or 'glacier help <command>' for command-specific options.");
@@ -162,6 +164,9 @@ public static class Program
                 break;
             case "security-check":
                 SecurityCheckCommandHandler.PrintHelp();
+                break;
+            case "verify-ecosystem":
+                VerifyEcosystemCommandHandler.PrintHelp();
                 break;
             default:
                 Console.ForegroundColor = ConsoleColor.Yellow;

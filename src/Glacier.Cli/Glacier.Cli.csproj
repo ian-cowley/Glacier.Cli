@@ -12,8 +12,8 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>glacier</ToolCommandName>
     <PackageId>Glacier.Cli</PackageId>
-    <Version>1.6.0</Version>
-    <PackageReleaseNotes>v1.6.0: Pure C# NativeAOT GGUF deep audit (glacier inspect --audit) and LoRA adapter audit (glacier audit-adapter).</PackageReleaseNotes>
+    <Version>1.6.1</Version>
+    <PackageReleaseNotes>v1.6.1: Pure C# NativeAOT cross-repo ProjectReference, retired-package, and optional security audit (glacier verify-ecosystem).</PackageReleaseNotes>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
