@@ -1,146 +1,103 @@
-# GLACIER CLI: The Unified Pure C# .NET 10 LLM Tool
-
 ![GLACIER CLI Banner](docs/images/glacier_cli_banner.jpg)
 
-<div align="center">
+# Glacier.Cli (`glacier`)
 
-### 🚀 **< 15ms** Cold Start &nbsp;|&nbsp; ⚡ **Zero** Python / C++ &nbsp;|&nbsp; 💎 **100% Pure C# .NET 10**
-
-**One global .NET 10 CLI tool for GGUF inference, LoRA fine-tuning, adapter fusion, GraphRAG, PagedAttention serving, and autonomous agents.**
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![.NET 10](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
+[![NuGet CI](https://github.com/ian-cowley/Glacier.Cli/actions/workflows/publish-nuget.yml/badge.svg)](https://github.com/ian-cowley/Glacier.Cli/actions/workflows/publish-nuget.yml)
 [![NuGet Version](https://img.shields.io/nuget/v/Glacier.Cli.svg)](https://www.nuget.org/packages/Glacier.Cli/)
-[![Ecosystem](https://img.shields.io/badge/Glacier-Ecosystem-blue)](https://github.com/ian-cowley)
-[![Website](https://img.shields.io/badge/Website-glaciersoftware.dev-66fcf1.svg)](https://glaciersoftware.dev/)
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-orange.svg?logo=buy-me-a-coffee)](https://buymeacoffee.com/glaciersoftware)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![.NET 10](https://img.shields.io/badge/.NET-10.0-purple.svg)
+![NativeAOT](https://img.shields.io/badge/NativeAOT-Compatible-brightgreen.svg)
 
-</div>
+`Glacier.Cli` provides the `glacier` global .NET 10 command-line tool for running local GGUF models, LoRA fine-tuning, adapter merging, GraphRAG querying, PagedAttention HTTP serving, HuggingFace downloads, autonomous agents, and workspace security audits.
 
 ---
 
-## ⚡ Install in One Command
+## Install
 
-### 📦 Via .NET 10 Global Tool (Recommended):
+Via .NET 10 global tool:
+
 ```bash
 dotnet tool install -g Glacier.Cli
 ```
 
-### 🪟 Windows (PowerShell):
+Or install standalone scripts on Windows PowerShell or Linux/macOS:
+
 ```powershell
 irm https://raw.githubusercontent.com/ian-cowley/Glacier.Cli/main/install.ps1 | iex
 ```
 
-### 🐧 Linux & 🍎 macOS:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ian-cowley/Glacier.Cli/main/install.sh | bash
 ```
 
 ---
 
-## 🎯 The Universal Command Matrix
+## Quick Start
 
-| Command | Purpose | Highlight |
-| :--- | :--- | :--- |
-| **`glacier run`** | Instant GPU/CPU streaming inference & REPL | AVX-512, DirectML, Vulkan, and Native Driver execution |
-| **`glacier tune`** | In-process PEFT LoRA fine-tuning | 6.96s / step (46 tok/s, 320 tokens/step, 10-step run) on RTX 4060 |
-| **`glacier merge`** | Zero-copy GGUF adapter fusion | Lossless Q8_0 / F16 delta fusion into standalone GGUF |
-| **`glacier rag`** | SIMD Vector + CSR Knowledge Graph RAG | Persistent REPL session reuse with hybrid vector + CSR graph hops |
-| **`glacier serve`** | Ollama & OpenAI HTTP continuous batching | PagedAttention server with configurable `--host` and `--port` |
-| **`glacier pull`** | High-speed chunked GGUF downloader | `HF_TOKEN` auth, HTTP `Range` `.part` resume, strict `GGUF` verification |
-| **`glacier agent`** | Autonomous pure C# agent execution | Multi-step LLM tool loop (`--model`) & zero-reflection built-in tools |
-
----
-
-## ⚡ 60-Second Quickstart
-
-### 1. Instant Inference (Llama 3, Phi-4, DeepSeek, Qwen)
 ```bash
-# Streaming answer to a single prompt
-glacier run model.gguf "Explain quantum computing in two sentences"
-
-# Interactive terminal chat REPL
-glacier run model.gguf
-```
-
-### 2. In-Process Fine-Tuning & Adapter Export
-```bash
-# Fine-tune directly in pure .NET 10
-glacier tune base.gguf --data dataset.jsonl --epochs 3 --rank 16 --out adapter.bin
-
-# Fuse LoRA adapter directly into a standalone production GGUF
-glacier merge base.gguf adapter.bin model-enterprise.gguf
-```
-
-### 3. In-Process GraphRAG
-```bash
-# Index documents and stream grounded responses with structural graph hops
-glacier rag --model model.gguf --docs ./knowledge --query "What is our architecture?"
-```
-
-### 4. Continuous Batching Server (Drop-in Ollama & OpenAI)
-```bash
-# Serves POST /v1/chat/completions (OpenAI) and POST /api/chat (Ollama)
-glacier serve model.gguf --host 127.0.0.1 --port 11434 --blocks 1024 --batch-size 16
-```
-
-### 5. Download Foundation Models
-```bash
-# Pull directly from HuggingFace (set HF_TOKEN for gated models)
+# 1. Download a GGUF model from HuggingFace
 glacier pull lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF
-```
 
-### 6. Autonomous Agent Execution
-```bash
-# Execute multi-step autonomous tool loop backed by a local GGUF model
+# 2. Run interactive chat REPL or single-prompt inference
+glacier run model.gguf "Explain KV caching concisely"
+
+# 3. Serve OpenAI (/v1/chat/completions) and Ollama (/api/chat) APIs locally
+glacier serve model.gguf --host 127.0.0.1 --port 11434 --blocks 1024 --batch-size 16
+
+# 4. Query local documents with GraphRAG
+glacier rag --docs ./knowledge --model model.gguf --query "How are locks managed?"
+
+# 5. Fine-tune a LoRA adapter and merge into GGUF
+glacier tune base.gguf --data train.jsonl --epochs 3 --rank 16 --out adapter.bin
+glacier merge base.gguf adapter.bin merged-model.gguf
+
+# 6. Run an autonomous agent or repository security audit
 glacier agent --model model.gguf "Inspect available GPU accelerators"
-
-# Or invoke built-in pure C# tools directly
-glacier agent "CALL devices: {}"
+glacier security-check .
 ```
 
 ---
 
-## 🖥️ Hardware & Model Compatibility
+## What You Can Do
 
-- **Hardware Acceleration**: NVIDIA RTX 40/30 series, AMD RDNA3 (DirectML / Vulkan / HIP), Host CPUs (SIMD AVX-512 & AVX2).
-- **Supported Architectures**: Meta Llama 3/3.1/3.2/3.3, Microsoft Phi-4/Phi-3, DeepSeek-V2/V3/R1, Mistral/Devstral, Alibaba Qwen 2/2.5.
-- **Quantization Types**: `Q4_K_M`, `Q5_K_M`, `Q6_K`, `Q8_0`, `Q4_0`, `MXFP4`, `F16`, `F32`.
-
-| **`glacier inspect`** | Inspect GGUF metadata & tensor layouts | Zero-copy header inspection |
-| **`glacier security-check`** | Scan directories/files for exposed secrets | Native AOT C# scanner (`.github/`, UTF-16, conn strings, `0x` keys) |
-
----
-
-## 🆕 What's New in v1.5.0
-
-- **Native C# `glacier security-check` CLI Command** (`SecurityCheckCommandHandler`) — Zero-dependency Native AOT secret scanner with `[GeneratedRegex]` detectors (Google/OpenAI/Anthropic/GitHub/AWS/HF/Slack keys, connection-string passwords, `0x` hex private keys), `.github/` workflow scanning, UTF-16 BOM/NUL decoding, and streaming large-file scans.
-- **Ecosystem Package Alignment (`v1.5.0`)** — Aligned dependencies across `Glacier.Serve v1.9.0`, `Glacier.Tune v1.7.0`, `Glacier.Agent v1.5.3`, `Glacier.MemEx v1.2.3`, `Glacier.Inference v1.10.1`, `Glacier.Polaris v1.2.6`, `Glacier.Rag v1.4.3`, `Glacier.Tensor v1.1.2`, `Glacier.Vector v1.3.1`, `Glacier.Graph v1.2.1`, `Glacier.Clavier v1.2.1`, and `Glacier.Gpu v1.2.1`.
-
-- **Hardened `glacier pull` Downloader** — added `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN` Bearer authentication, strict path-traversal containment, `.part` HTTP `Range` resume on `206 Partial Content`, redirected-console cursor safety, and fail-closed `GGUF` magic verification.
-- **Persistent `glacier rag` Session Reuse** — hoisted `InferenceSession` outside the interactive REPL loop so model weights and KV caches remain warm across queries.
-- **Configurable `glacier serve --host` Binding** — wired `.UseHost(host)` directly into `GlacierServeApp` builder.
-- **Real `glacier agent` LLM Loop & Built-In Tools** — wired `IAgentChatModel` over `InferenceSession` (`--model`, `--max-steps`) and registered built-in pure C# tools (`ping`, `clock`, `devices`).
-- **Upgraded Ecosystem Dependencies & OIDC Publishing** — upgraded all Glacier Tier 0–3 packages (`Glacier.Inference 1.3.2`, `Glacier.Serve 1.2.0`, `Glacier.Rag 1.2.0`, `Glacier.Agent 1.1.0`, `Glacier.Polaris 1.1.0`) with `TreatWarningsAsErrors` and NuGet Trusted Publishing OIDC.
+| Command | Capability |
+| :--- | :--- |
+| `glacier run` | Streaming single-prompt generation or interactive REPL (`cuda`/`directml`/`cpu`, LoRA attach, `--split`) |
+| `glacier tune` | In-process LoRA fine-tuning from ChatML JSONL with optional `--merge` |
+| `glacier merge` | Multi-threaded fusion of LoRA delta weights (`0x41524F4C`) into GGUF (`Q8_0`) |
+| `glacier rag` | Hybrid dense vector + CSR knowledge-graph retrieval over local docs (with optional NPU embeddings) |
+| `glacier serve` | Continuous-batching PagedAttention HTTP server with Sleep memory consolidation and PeerBounce routes |
+| `glacier bounce` | Standalone Peer Critic + OS-sandboxed compiler verification proxy (`--npu-critic`, `--harness`) |
+| `glacier pull` | Multi-connection `Range` GGUF downloader with `HF_TOKEN` auth, `.part` resume, SHA-256 & header checks |
+| `glacier agent` | Multi-step autonomous `IAgentChatModel` tool loop (`--model`, `--npu`, `--clavier-model`) |
+| `glacier devices` | Enumerate GPUs, VRAM, and CPU SIMD capabilities |
+| `glacier inspect` | Print GGUF metadata/tensors and run `--audit` bounds/NaN/dequantization integrity checks |
+| `glacier audit-adapter` | Verify binary LoRA adapter headers, EOF alignment, norms, and non-zero LoRA-B coverage |
+| `glacier bench` | Benchmark cold load, prefill tok/s, and decode tok/s on a GGUF model |
+| `glacier config` | View or update persistent acceleration settings |
+| `glacier security-check` | Scan files and `.github` workflows for exposed credentials, tokens, and private keys |
+| `glacier verify-ecosystem` | Audit MSBuild cross-repo references, retired package IDs, and secret hygiene |
 
 ---
 
-## Credits
+## Platform & Compatibility
 
-Developed by **Ian Cowley** and **Antigravity (Google DeepMind)**.
-
----
-
-## 📄 License
-MIT License. High-Performance Pure C# .NET 10 Ecosystem.
+- **Runtime:** .NET 10 (`net10.0`), `ToolCommandName = glacier`, Native AOT and trimmer compatible.
+- **Hardware Acceleration:** NVIDIA CUDA, DirectML, Vulkan/HIP (via `Glacier.Gpu` / `Glacier.Inference`), AMD XDNA 2 NPU sidecar discovery (`--npu` / `auto-npu`), and AVX-512 / AVX2 / NEON CPU SIMD.
+- **Model Formats:** GGUF (`Q4_K_M`, `Q5_K_M`, `Q6_K`, `Q8_0`, `Q4_0`, `MXFP4`, `F16`, `F32`) across Llama 3/3.1/3.2/3.3, Phi-3/4, DeepSeek-V2/V3/R1, Mistral, Qwen 2/2.5, and Gemma architectures.
 
 ---
 
-## ❄️ Glacier Ecosystem & Support
+## Documentation
 
-Part of the **[Glacier Ecosystem](https://glaciersoftware.dev/)** — high-performance, zero-allocation developer tooling and data engines natively built for modern C# and .NET 10.
+- [Command Reference Manual](docs/manual.md) — Exact flags and options for all 15 `glacier` subcommands
+- [Architecture](docs/architecture.md) — Subsystem wiring across the Glacier library stack and Native AOT dispatch
+- [Changelog](CHANGELOG.md) — Version history (`v1.5.0` to `v1.6.3`)
 
-* 🌐 **Website & Documentation**: [glaciersoftware.dev](https://glaciersoftware.dev/)
-* ☕ **Buy Me a Coffee**: [buymeacoffee.com/glaciersoftware](https://buymeacoffee.com/glaciersoftware)
-* ❤️ **GitHub Sponsors**: [github.com/sponsors/ian-cowley](https://github.com/sponsors/ian-cowley)
-* 🐙 **All Repositories**: [github.com/ian-cowley](https://github.com/ian-cowley)
+---
+
+## License & Credits
+
+Licensed under the [MIT License](LICENSE).
+
+Developed by Ian Cowley, Antigravity (Google DeepMind) and Claude.
